@@ -1,0 +1,188 @@
+---
+title: "elevation_JH"
+author: "Jessica Herrmann"
+date: "2023-08-10"
+output: html_document
+---
+```{r Load packages}
+library(terra)
+library(dplyr)
+library(geodata)
+library(ggplot2)
+```
+
+```{r Downloading elevation data}
+wd_JH <- file.path("C:", "Users", "jnherrmann", "Desktop", "phenesse-proj", fsep="\\")
+
+# World elevation raster
+global_elev <- elevation_global(res = 10, path = wd_JH)
+global_elev <- rast("wc2.1_10m_elev.tif")
+plot(global_elev)
+
+# USA elevation raster
+usa_elev <- elevation_30s(country = "USA", path = wd_JH)
+usa_elev <- rast("USA_elv_msk.tif")
+plot(usa_elev)
+```
+
+```{r Define CRS and AOI}
+# We want to first change the CRS to WGS84, so we'll define that as an object.
+newcrs <- "+proj=longlat +datum=WGS84" # may not be necessary
+
+# We will also want to crop the new projection, so we can
+# define the area of interest (AOI) here:
+AOI <- ext(-104, -60, 29, 44)
+```
+
+```{r Global elevation raster}
+# Changing CRS to WGS84
+proj_global_elev <- terra::project(global_elev, newcrs)
+crs(proj_global_elev)
+plot(proj_global_elev)
+
+# Creating template raster to project raster onto/transform original projection
+template_global_elev <- rast(proj_global_elev)
+
+# Now projecting the original raster onto the template
+proj2_global_elev <- terra::project(global_elev, template_global_elev)
+proj2_global_elev
+plot(proj2_global_elev)
+
+# Cropping to area of interest (AOI)
+global_elev_crop <- crop(proj2_global_elev, AOI)
+plot(global_elev_crop)
+
+# Converting the raster(.tif) file to a dataframe for use in our model
+global_elev_df <- as.data.frame(global_elev_crop, xy=T)
+global_elev_df
+
+# Next rename columns
+global_elev_df <- global_elev_df %>% rename_at("x", ~ "longitude")
+global_elev_df <- global_elev_df %>% rename_at("y", ~ "latitude")
+global_elev_df <- global_elev_df %>% rename_at("wc2.1_10m_elev", ~ "elevation")
+
+# Add column for latitudinal bin (rounded latitude)
+global_elev_df$latitudinal_bin <- round(global_elev_df$latitude)
+global_elev_df$estimate <- "global"
+global_elev_df <- global_elev_df[order(global_elev_df$latitudinal_bin, decreasing=F),]
+head(global_elev_df) # checking...
+tail(global_elev_df)
+
+# Add columns for longitudinal bin
+global_elev_df$longitudinal_bin <- round(global_elev_df$longitude)
+global_elev_df <- global_elev_df[order(global_elev_df$longitudinal_bin, decreasing=F),]
+head(global_elev_df) # checking...
+tail(global_elev_df)
+
+# Rounding elevation values per latitudinal bin
+global_elev_df2 <- global_elev_df %>%
+  select(elevation, latitudinal_bin, estimate) %>%
+  group_by(latitudinal_bin) %>%
+  mutate(avg_elevation = mean(elevation)) %>%
+  ungroup() %>%
+  select(avg_elevation, latitudinal_bin, estimate) %>%
+  group_by(latitudinal_bin) %>%
+  distinct()
+
+head(global_elev_df2)
+```
+
+```{r United States elevation raster}
+# Changing CRS to WGS84
+proj_usa_elev <- terra::project(usa_elev, newcrs)
+crs(proj_usa_elev)
+plot(proj_usa_elev)
+
+# Creating template raster to project raster onto/transform original projection
+template_usa_elev <- rast(proj_usa_elev)
+
+# Now projecting the original raster onto the template
+proj2_usa_elev <- terra::project(usa_elev, template_usa_elev)
+proj2_usa_elev
+plot(proj2_usa_elev)
+
+# Cropping to area of interest (AOI)
+usa_elev_crop <- crop(proj2_usa_elev, AOI)
+plot(usa_elev_crop)
+
+# Converting the raster(.tif) file to a dataframe for use in our model
+usa_elev_df <- as.data.frame(usa_elev_crop, xy=T)
+usa_elev_df
+
+# Next rename columns
+usa_elev_df <- usa_elev_df %>% rename_at("x", ~ "longitude")
+usa_elev_df <- usa_elev_df %>% rename_at("y", ~ "latitude")
+usa_elev_df <- usa_elev_df %>% rename_at("USA_elv_msk", ~ "elevation")
+
+# Add column for latitudinal bin (rounded latitude)
+usa_elev_df$latitudinal_bin <- round(usa_elev_df$latitude)
+usa_elev_df$estimate <- "usa"
+usa_elev_df <- usa_elev_df[order(usa_elev_df$latitudinal_bin, decreasing=F),]
+head(usa_elev_df) # checking...
+tail(usa_elev_df)
+```
+
+```{r Avg. elevation box and whiskers}
+avg_elevation_summary = summarySE(data = usa_elev_df, measurevar = "elevation", groupvar = c("latitudinal_bin"))
+avg_elevation_summary
+
+avg_elev_summary_plot <- ggplot(data = usa_elev_df, aes(x = latitudinal_bin, y = elevation, group = latitudinal_bin)) +
+  geom_boxplot() +
+  xlab("Latitudinal bin") +
+  ylab("Mean elevation") +
+  theme_classic()
+
+avg_elev_summary_plot
+```
+
+```{r Averaging elevation values per latitudinal bin}
+usa_elev_df2 <- usa_elev_df %>%
+  select(elevation, latitudinal_bin, estimate) %>%
+  group_by(latitudinal_bin) %>%
+  mutate(avg_elevation = mean(elevation)) %>%
+  ungroup() %>%
+  select(avg_elevation, latitudinal_bin, estimate) %>%
+  group_by(latitudinal_bin) %>%
+  distinct()
+
+head(usa_elev_df2)
+
+# Notice how the elevation estimates are similar but not completely the same, in comparing the data derived from the global raster versus the US-specific raster. I think the US-specific dataset is more accurate than the global one, but I will plot them both to see how they compare.
+```
+
+```{r PLotting the two elevation estimates // sanity check}
+elev_join_df <- rbind(global_elev_df2, usa_elev_df2)
+elev_join_df
+
+elev_comparison_plot <- ggplot(data = elev_join_df, aes(x = latitudinal_bin, y = avg_elevation, color = estimate)) +
+  geom_line(linewidth = 2) +
+  scale_color_manual(name = "Estimate",
+                     breaks = c("global", "usa"),
+                     values = c("seagreen4","seagreen2")) +
+  xlim(30, 41) +
+  labs(title = "Avg. elevation by latitude, from global SRTM") +
+  xlab("Latitudinal bin") +
+  ylab("Avg. estimated elevation (m above sea level)") +
+  theme_classic()
+
+elev_comparison_plot
+
+# Looks like the average estimated elevation is about the same, no matter which raster map you use. However, the raster based on the US map generally yields slightly higher elevations. If you look at the original raster maps, this makes sense, as this map has higher resolution and greater relief around shorelines, probably because elevation levels were interpolated over smaller grid cells. Therefore, the US map-based raster is likely more accurate.
+```
+
+```{r just the elevation from the US raster}
+elev_usa_plot <- ggplot(data = usa_elev_df2, aes(x = latitudinal_bin, y = avg_elevation)) +
+  geom_line(linewidth = 0.5) +
+  xlim(30, 41) +
+  # labs(title = "Mean elevation by latitude, from global SRTM") +
+  xlab("Latitudinal bin") +
+  ylab("Mean estimated elevation (m above sea level)") +
+  theme_classic()
+
+elev_usa_plot
+```
+
+```{r Write CSV}
+usa_elev_df2$estimate <- NULL # deleting "estimate" column
+write.csv(usa_elev_df2, 'elevation_df.csv') # US map-based estimates were more accurate, so we'll use this data file in the LMER
+```

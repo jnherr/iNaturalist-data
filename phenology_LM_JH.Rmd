@@ -1,0 +1,88 @@
+---
+title: "phenology_LM_JH"
+output: html_document
+date: '2023-08-04'
+---
+```{r Load package libraries}
+library(curl)
+library(ggplot2)
+library(tidyverse)
+library(dplyr)
+library(lme4)
+library(lmerTest)
+library(performance)
+library(car)
+library(stats)
+library(emmeans)
+```
+
+```{r 2019 - 2022 linear model data}
+QE_lm1_df <- curl("https://raw.githubusercontent.com/jnherr/iNaturalist-phenology-project/main/phenology_LM1_cumulative_df.csv")
+QE_lm1_df <- read.csv(QE_lm1_df, header = TRUE, sep = ",")
+QE_lm1_df
+```
+
+```{r Daymet data}
+# LM1 climate data, averaged for each lat. bin over 2019 -22
+climate_lm1_df <- curl("https://raw.githubusercontent.com/jnherr/iNaturalist-phenology-project/main/climate_LM1_df.csv")
+climate_lm1_df <- read.csv(climate_lm1_df, header = TRUE, sep = ",")
+climate_lm1_df <- climate_lm1_df %>% select(-X)
+climate_lm1_df <- climate_lm1_df %>% rename_at('latitudinal_bin', ~'lat')
+head(climate_lm1_df)
+```
+
+```{r Merging dataframes}
+phenology_lm1 <- left_join(QE_lm1_df, climate_lm1_df, by = "lat")
+
+# Converting these columns to factors
+phenology_lm1$lat = as.factor(phenology_lm1$lat)
+phenology_lm1$species = as.factor(phenology_lm1$species)
+
+head(phenology_lm1)
+```
+
+```{r Onset timing LM1}
+# Starting with the "full" LM
+# Wasn't able to run this with all interaction terms because it gave an error
+# Likely due to the fact that there is no replication per species per latitude
+
+lm1_full <- lm(onset_doy ~ species + lat + avg_prcp + avg_temp_min, data = phenology_lm1)
+
+Anova(lm1_full)
+summary(lm1_full)
+check_model(lm1_full)
+```
+
+```{r Onset linear model selection}
+# Most basic model, test1
+onset_lm1_test1 = lm(onset_doy ~ species, data = phenology_lm1)
+AIC(onset_lm1_test1)
+
+# Second model, test2
+onset_lm1_test2 = lm(onset_doy ~ species + lat, data = phenology_lm1)
+summary(onset_lm1_test2)
+AIC(onset_lm1_test2) # this model is better than test1
+
+# These models (test3 and test4) do not run.
+onset_lm1_test3 = lm(onset_doy ~ species + lat + avg_prcp, data = phenology_lm1)
+AIC(onset_lm1_test3)
+
+onset_lm1_test4 = lm(onset_doy ~ species * lat * avg_temp_min * avg_prcp, data = phenology_lm1)
+
+# Comparing model AIC scores
+anova(onset_lm1_test1, onset_lm1_test2) # test2 looks like the best option
+anova(onset_lm1_test1, onset_lm1_test3) # no result
+anova(onset_lm1_test2, onset_lm1_test3) # no result
+anova(onset_lm1_test3, onset_lm1_test4) # no result
+```
+
+```{r anova on selected model}
+# We can also try an anova on the second model
+onset_aov_test2 = aov(onset_doy ~ species + lat, data = phenology_lm1)
+summary(onset_aov_test2)
+TukeyHSD(onset_aov_test2)
+
+# TukeyHSD() compares the means, in this case the mean onset times, across species, over all latitudinal bins
+# "diff" is the difference in number of days between avg. onset times for 2 spp.
+# p-values also tell us that there is no sig. difference between the onset times of B. philenor and L. a. astyanax (in general, across all latitudes). However, there is a significant difference between the onset dates for B. philenor and L. archippus, which is our a priori exprected result. Cool!
+```

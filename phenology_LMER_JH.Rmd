@@ -1,0 +1,117 @@
+---
+title: "phenology_LMER_JH"
+output: html_document
+date: '2023-07-13'
+---
+```{r Load package libraries}
+library(curl)
+library(ggplot2)
+library(tidyverse)
+library(dplyr)
+library(lme4)
+library(lmerTest)
+library(performance)
+library(car)
+library(stats)
+library(emmeans)
+```
+
+```{r 2019 - 2022 butterfly data}
+QE_lmer_df <- curl("https://raw.githubusercontent.com/jnherr/iNaturalist-phenology-project/main/phenology_LMER_df.csv")
+QE_lmer_df <- read.csv(QE_lmer_df, header = TRUE, sep = ",")
+QE_lmer_df
+```
+
+Loading the Daymet climate dataframe
+```{r Daymet data}
+daymet_lmer_df <- curl("https://raw.githubusercontent.com/jnherr/iNaturalist-phenology-project/main/climate_LMER_df.csv")
+daymet_lmer_df <- read.csv(daymet_lmer_df, header = TRUE, sep = ",")
+daymet_lmer_df <- daymet_lmer_df %>% select(-X)
+daymet_lmer_df
+```
+
+Combining the two dataframes
+```{r Merging dataframes}
+phenology_lmer <- left_join(QE_lmer_df, daymet_lmer_df, by = "lat_yr")
+
+# Add back other columns
+phenology_lmer$lat <- phenology_lmer$lat
+phenology_lmer$year <- phenology_lmer$year
+phenology_lmer$lat_yr <- phenology_lmer$lat_yr
+phenology_lmer$species <- phenology_lmer$species
+
+# Converting these columns to factors
+phenology_lmer$lat = as.factor(phenology_lmer$lat)
+phenology_lmer$species = as.factor(phenology_lmer$species)
+phenology_lmer$year = as.factor(phenology_lmer$year)
+phenology_lmer$lat_yr = as.factor(phenology_lmer$lat_yr)
+
+head(phenology_lmer)
+```
+
+```{r Plotting deviation in min. temp and prcp for 2019 - 2022}
+# Exploratory boxplots to visualize annual variation in climate
+plot(x = phenology_lmer$year, y = phenology_lmer$dev_temp_min)
+plot(x = phenology_lmer$year, y = phenology_lmer$dev_prcp)
+
+# It looks like 2022 was a colder year with less precipitation.
+# Check out the pheno_plots_JH.Rmd script for onset estimates graphed separately for each year.
+```
+
+```{r Onset timing LMER}
+# Starting with the full LMER
+lmer_full <- lmer(onset_doy ~ species * lat * dev_prcp * dev_temp_min + (1|year), data = phenology_lmer)
+
+Anova(lmer_full)
+summary(lmer_full)
+check_model(lmer_full) # Try running in the console then click on "Plots" > "Zoom"
+                       # This shows some inflated VIFs/high collinearity, so we will need to simplify the model.
+```
+
+```{r Stepwise model selection}
+onset_lmer_test1 = lmer(onset_doy ~ species + lat + dev_prcp + dev_temp_min + (1|year), data = phenology_lmer)
+
+onset_lmer_test2 = lmer(onset_doy ~ species * lat + dev_prcp + dev_temp_min + (1|year), data = phenology_lmer) # lower AIC than onset_lm_test1
+
+onset_lmer_test3 = lmer(onset_doy ~ species * lat * dev_prcp + dev_temp_min + (1|year), data = phenology_lmer) # lower AIC than onset_lm_test2; best so far
+
+onset_lmer_test4 = lmer(onset_doy ~ species + lat * dev_prcp + dev_temp_min + (1|year), data = phenology_lmer) # doesn't score as well as AIC than onset_lm_test2 or onset_lm_test3
+
+onset_lmer_test5 = lmer(onset_doy ~ species + lat * dev_prcp * dev_temp_min + (1|year), data = phenology_lmer) # doesn't score as well as AIC than onset_lm_test3
+
+onset_lmer_test6 = lmer(onset_doy ~ species * lat + dev_prcp * dev_temp_min + (1|year), data = phenology_lmer)
+
+onset_lmer_test7 = lmer(onset_doy ~ species * lat * dev_prcp * dev_temp_min + (1|year), data = phenology_lmer) # full interactive model won't run
+
+anova(onset_lmer_test1, onset_lmer_test2) # test2
+anova(onset_lmer_test2, onset_lmer_test3) # test3
+anova(onset_lmer_test2, onset_lmer_test4) # test2
+anova(onset_lmer_test3, onset_lmer_test4) # test3
+anova(onset_lmer_test3, onset_lmer_test5) # test3
+anova(onset_lmer_test3, onset_lmer_test6) # test3
+anova(onset_lmer_test3, onset_lmer_test7) # test7 doesn't run, so can't compare
+
+# Looks like the 3rd model is the best fit. The full interactive model (test7) won't run.
+```
+
+```{r Calculating p-values for pairwise comparison of species onset dates}
+# p < 0.05 means that there is no significant difference between species onset dates for the corresponding latitudinal bin
+
+# LMER dataset, but estimating from data binned only by latitude, with year as a random effect
+lmer_em1 = lmer(onset_doy ~ species*lat + (1|year), data = phenology_lmer)
+emms1 <- emmeans(lmer_em1, ~ species|lat)
+pairs(emms1, interaction = "pairwise", adjust = "tukey")
+```
+
+```{r Testing species interactions with climate variables}
+lmer_em2 = lmer(onset_doy ~ species*dev_prcp + (1|year), data = phenology_lmer)
+emms2 <- emmeans(lmer_em2, ~ dev_prcp|species)
+pairs(emms2, interaction = "pairwise") # doesn't run
+
+lmer_em3 = lmer(onset_doy ~ species*dev_temp_min + (1|year), data = phenology_lmer)
+emms3 <- emmeans(lmer_em3, ~ dev_temp_min|species)
+pairs(emms3, interaction = "pairwise") # also doesn't run
+
+Anova(lmer_em3) # Shows no sig. interaction b/w species and minimum temperature
+                # Agrees with our best-fit model (test3)
+```

@@ -1,0 +1,1830 @@
+---
+title: "phenology_estimates_LMER_JH"
+output: html_document
+date: '2023-08-08'
+---
+```{r Load packages}
+library(curl)
+library(ggplot2)
+library(tidyverse)
+library(dplyr)
+library(lubridate)
+library(sf)
+library(spData)
+library(phenesse)
+```
+
+Note - the data in my GitHub was downloaded from iNaturalist under the following parameters:
+- quality grade: research
+- reviewed: any
+- identifications: most agree
+- captive/cultivated: no
+- date range: 01-01-2002 through 12-31-2022 (later pared down to 01-01-2019 through 12-31-2021)
+
+```{r B. philenor data}
+b <- curl("https://raw.githubusercontent.com/jnherr/iNaturalist-phenology-project/main/b_philenor_iNat_data.csv")
+battus <- read.csv(b, header = TRUE, sep = ",")
+head(battus)
+
+length(battus$id) ### Sample size: 37984
+b <- subset(battus, select = c(id, observed_on, latitude, longitude, scientific_name) )
+head(b)
+
+b <- b %>% filter(scientific_name %in% c("Battus philenor", "Battus philenor philenor")) # getting rid of other subspecies, e.g. B. p. hirsuta
+length(b$id) # n = 36592
+battus <- na.omit(b)
+length(battus$id) ### New sample size: 36479
+
+# Adding dates to whole Battus dataset
+b.dates <- parse_date_time(battus$observed_on, "ymd")
+b.months <- months(b.dates)
+b.year <- year(b.dates)
+b.day <- day(b.dates)
+days_of_the_year <- yday(b.dates) #  days since Jan 1
+battus$julian_day <- days_of_the_year
+battus$year <- b.year
+battus$month <- b.months
+battus$day <- b.day
+battus
+
+# Adding longitudinal cutoff (see rationale for this cutoff in the plots made later in this document)
+battus <- battus %>% filter(longitude > -102.5)
+summary(battus)
+battus
+```
+
+```{r L. a. astyanax data}
+l <- curl("https://raw.githubusercontent.com/jnherr/iNaturalist-phenology-project/main/l_a_astyanax_iNat_data.csv")
+astyanax <- read.csv(l, header = TRUE, sep = ",")
+head(astyanax)
+
+length(astyanax$id) ### Sample Size: 25148
+l <- subset(astyanax, select = c(id, observed_on, latitude, longitude, scientific_name) )
+
+l <- l %>% filter(scientific_name %in% "Limenitis arthemis astyanax") # getting rid of other subspecies (namely L. a. arizonensis)
+length(l$id) # n = 24435
+astyanax <- na.omit(l)
+length(astyanax$id) ### New Sample Size: 24376
+
+# Adding dates to whole Limenitis dataset
+l.dates <- parse_date_time(astyanax$observed_on, "ymd")
+l.months <- months(l.dates)
+l.year <- year(l.dates)
+l.day <- day(l.dates)
+days_of_the_year <- yday(l.dates) #  days since Jan 1
+astyanax$julian_day <- days_of_the_year
+astyanax$year <- l.year
+astyanax$month <- l.months
+astyanax$day <- l.day
+astyanax
+
+# Adding longitudinal cutoff
+astyanax <- astyanax %>% filter(longitude > -102.5)
+summary(astyanax)
+astyanax
+```
+
+```{r Establishing time period to fit data distribution}
+# Because most of the data for B. philenor and L. a. astyanax comes from after 2019, we decided to truncate the datasets to 2019 - 2022. Not concerned with L. archippus, as this is the control species.
+
+battus_data_dist <- ggplot(data = battus) +
+  geom_bar(mapping=aes( x=year))
+
+battus_data_dist
+
+astyanax_data_dist <- ggplot(data = astyanax) +
+  geom_bar(mapping=aes( x=year))
+
+astyanax_data_dist
+```
+
+Subdividing the data by latitudinal gradients (1ºN per bin).
+
+Battus' northern range limit occurs at ~ 41ºN (Ries & Mullen 2008).
+
+We know from anecdotal evidence that the heart of Battus' range occurs around the Great Smoky Mountains in TN, so we will keep this location in mind as the approximate heart of the range (~ 35.5ºN).
+
+```{r Subsetting Battus data by latitudinal bin}
+# First subset all data by the total latitudinal range of interest.
+battus <- battus %>%
+  filter( latitude > "25", latitude < "45") %>%
+  filter(year > 2018)
+battus
+
+# Next use the round() function to create a new column binning all latitudes into integer values.
+battus$latitudinal_bin <- round(battus$latitude)
+battus <- battus[order(battus$latitudinal_bin, decreasing=F),]
+battus
+
+# Check to ensure the data was binned correctly.
+head(battus)
+tail(battus) # looks good
+length(battus$id) # n = 26364
+
+# This next step checks the sample size for each latitudinal bin.
+
+# 25ºN lat. bin
+length(which(battus$latitudinal_bin==25))
+
+# 26ºN lat. bin
+length(which(battus$latitudinal_bin==26))
+
+# 27ºN lat. bin
+length(which(battus$latitudinal_bin==27))
+
+# 28ºN lat. bin
+length(which(battus$latitudinal_bin==28))
+
+# 29ºN lat. bin
+length(which(battus$latitudinal_bin==29))
+
+# 30ºN lat. bin
+length(which(battus$latitudinal_bin==30))
+
+# 31ºN lat. bin
+length(which(battus$latitudinal_bin==31))
+
+# 32ºN lat. bin
+length(which(battus$latitudinal_bin==32))
+
+# 33ºN lat. bin
+length(which(battus$latitudinal_bin==33))
+
+# 34ºN lat. bin
+length(which(battus$latitudinal_bin==34))
+
+# 35ºN lat. bin
+length(which(battus$latitudinal_bin==35))
+
+# 36ºN lat. bin
+length(which(battus$latitudinal_bin==36))
+
+# 37ºN lat. bin
+length(which(battus$latitudinal_bin==37))
+
+# 38ºN lat. bin
+length(which(battus$latitudinal_bin==38))
+
+# 39ºN lat. bin
+length(which(battus$latitudinal_bin==39))
+
+# 40ºN lat. bin
+length(which(battus$latitudinal_bin==40))
+
+# 41ºN lat. bin
+length(which(battus$latitudinal_bin==41))
+
+# 42ºN lat. bin
+length(which(battus$latitudinal_bin==42))
+
+# 43ºN lat. bin
+length(which(battus$latitudinal_bin==43)) # all binned sample counts exceed the minimum of 30 data points; looks good (n = 66)
+
+# 44ºN lat. bin
+length(which(battus$latitudinal_bin==44)) # insufficient data points (n = 19)
+
+# 45ºN lat. bin
+length(which(battus$latitudinal_bin==45)) # insufficient data points (n = 1)
+```
+
+```{r Subsetting astyanax data by latitudinal bin}
+# First subset all data by the total latitudinal range of interest.
+astyanax <- astyanax %>%
+  filter( latitude > "25", latitude < "43") %>%
+  filter(year > 2018)
+astyanax
+
+# Next use the round() function to create a new column binning all latitudes into integer values.
+astyanax$latitudinal_bin <- round(astyanax$latitude)
+astyanax <- astyanax[order(astyanax$latitudinal_bin, decreasing=F),]
+astyanax
+
+# Check to ensure the data was binned correctly.
+head(astyanax)
+tail(astyanax) # looks good
+length(astyanax$id) # n = 21307
+
+# This next step checks the sample size for each latitudinal bin.
+
+# 25ºN lat. bin
+length(which(astyanax$latitudinal_bin==25))
+
+# 26ºN lat. bin
+length(which(astyanax$latitudinal_bin==26))
+
+# 27ºN lat. bin
+length(which(astyanax$latitudinal_bin==27))
+
+# 28ºN lat. bin
+length(which(astyanax$latitudinal_bin==28))
+
+# 29ºN lat. bin
+length(which(astyanax$latitudinal_bin==29))  # this is where we start to get                                                    # sufficient data for phenesse
+                                              # n = 65
+
+# 30ºN lat. bin
+length(which(astyanax$latitudinal_bin==30))
+
+# 31ºN lat. bin
+length(which(astyanax$latitudinal_bin==31))
+
+# 32ºN lat. bin
+length(which(astyanax$latitudinal_bin==32))
+
+# 33ºN lat. bin
+length(which(astyanax$latitudinal_bin==33))
+
+# 34ºN lat. bin
+length(which(astyanax$latitudinal_bin==34))
+
+# 35ºN lat. bin
+length(which(astyanax$latitudinal_bin==35))
+
+# 36ºN lat. bin
+length(which(astyanax$latitudinal_bin==36))
+
+# 37ºN lat. bin
+length(which(astyanax$latitudinal_bin==37))
+
+# 38ºN lat. bin
+length(which(astyanax$latitudinal_bin==38))
+
+# 39ºN lat. bin
+length(which(astyanax$latitudinal_bin==39))
+
+# 40ºN lat. bin
+length(which(astyanax$latitudinal_bin==40))
+
+# 41ºN lat. bin
+length(which(astyanax$latitudinal_bin==41))
+
+# 42ºN lat. bin
+length(which(astyanax$latitudinal_bin==42))
+
+# 43ºN lat. bin
+length(which(astyanax$latitudinal_bin==43)) # all binned sample counts exceed the minimum of 30 data points; also looks good
+```
+
+```{r Lat. bin 29 - capping and subsetting by year}
+battus29 <- subset(battus, latitudinal_bin == "29")
+astyanax29 <- subset(astyanax, latitudinal_bin == "29")
+
+# Now capping the number of observations per date (but not by Julian day/doy):
+battus_capped29 = battus29[!duplicated(battus29$observed_on),]
+battus_capped29[order(battus_capped29[,'julian_day']),]
+
+astyanax_capped29 = astyanax29[!duplicated(astyanax29$observed_on),]
+astyanax_capped29[order(astyanax_capped29[,'julian_day']),]
+
+battus_capped29 # n = 958
+astyanax_capped29 # n = 81
+
+# Separate by unique latitude-year combination into individual dataframes in order to calculate the percentiles separately.
+
+# Asterisks(*) denote sample sizes under 30 observations per latitudinal bin per year. These are unusable with the phenesse package.
+
+## Battus
+battus_29_2019 <- subset(battus_capped29, year == "2019")
+battus_29_2019 # n = 132
+
+battus_29_2020 <- subset(battus_capped29, year == "2020")
+battus_29_2020 # n = 182
+
+battus_29_2021 <- subset(battus_capped29, year == "2021")
+battus_29_2021 # n = 208
+
+battus_29_2022 <- subset(battus_capped29, year == "2022")
+battus_29_2022 # n = 198
+
+## astyanax
+astyanax_29_2019 <- subset(astyanax_capped29, year == "2019")
+astyanax_29_2019 # n = 12*
+
+astyanax_29_2020 <- subset(astyanax_capped29, year == "2020")
+astyanax_29_2020 # n = 15*
+
+astyanax_29_2021 <- subset(astyanax_capped29, year == "2021")
+astyanax_29_2021 # n = 21*
+
+astyanax_29_2022 <- subset(astyanax_capped29, year == "2022")
+astyanax_29_2022 # n = 14*
+```
+
+```{r Lat. bin 30 - capping and subsetting by year}
+battus30 <- subset(battus, latitudinal_bin == "30")
+astyanax30 <- subset(astyanax, latitudinal_bin == "30")
+
+battus_capped30 = battus30[!duplicated(battus30$observed_on),]
+battus_capped30[order(battus_capped30[,'julian_day']),]
+
+astyanax_capped30 = astyanax30[!duplicated(astyanax30$observed_on),]
+astyanax_capped30[order(astyanax_capped30[,'julian_day']),]
+
+battus_capped30 # n = 1670
+astyanax_capped30 # n = 381
+
+## Battus
+battus_30_2019 <- subset(battus_capped30, year == "2019")
+battus_30_2019 # n = 236
+
+battus_30_2020 <- subset(battus_capped30, year == "2020")
+battus_30_2020 # n = 265
+
+battus_30_2021 <- subset(battus_capped30, year == "2021")
+battus_30_2021 # n = 282
+
+battus_30_2022 <- subset(battus_capped30, year == "2022")
+battus_30_2022 # n = 286
+
+## astyanax
+astyanax_30_2019 <- subset(astyanax_capped30, year == "2019")
+astyanax_30_2019 # n = 70
+
+astyanax_30_2020 <- subset(astyanax_capped30, year == "2020")
+astyanax_30_2020 # n = 65
+
+astyanax_30_2021 <- subset(astyanax_capped30, year == "2021")
+astyanax_30_2021 # n = 102
+
+astyanax_30_2022 <- subset(astyanax_capped30, year == "2022")
+astyanax_30_2022 # n = 74
+```
+
+```{r Lat. bin 31 - capping and subsetting by year}
+battus31 <- subset(battus, latitudinal_bin == "31")
+astyanax31 <- subset(astyanax, latitudinal_bin == "31")
+
+battus_capped31 = battus31[!duplicated(battus31$observed_on),]
+battus_capped31[order(battus_capped31[,'julian_day']),]
+
+astyanax_capped31 = astyanax31[!duplicated(astyanax31$observed_on),]
+astyanax_capped31[order(astyanax_capped31[,'julian_day']),]
+
+battus_capped31 # n = 770
+astyanax_capped31 # n = 361
+
+## Battus
+battus_31_2019 <- subset(battus_capped31, year == "2019")
+battus_31_2019 # n = 109
+
+battus_31_2020 <- subset(battus_capped31, year == "2020")
+battus_31_2020 # n = 133
+
+battus_31_2021 <- subset(battus_capped31, year == "2021")
+battus_31_2021 # n = 158
+
+battus_31_2022 <- subset(battus_capped31, year == "2022")
+battus_31_2022 # n = 164
+
+## astyanax
+astyanax_31_2019 <- subset(astyanax_capped31, year == "2019")
+astyanax_31_2019 # n = 52
+
+astyanax_31_2020 <- subset(astyanax_capped31, year == "2020")
+astyanax_31_2020 # n = 52
+
+astyanax_31_2021 <- subset(astyanax_capped31, year == "2021")
+astyanax_31_2021 # n = 77
+
+astyanax_31_2022 <- subset(astyanax_capped31, year == "2022")
+astyanax_31_2022 # n = 80
+```
+
+```{r Lat. bin 32 - capping and subsetting by year}
+battus32 <- subset(battus, latitudinal_bin == "32")
+astyanax32 <- subset(astyanax, latitudinal_bin == "32")
+
+battus_capped32 = battus32[!duplicated(battus32$observed_on),]
+battus_capped32[order(battus_capped32[,'julian_day']),]
+
+astyanax_capped32 = astyanax32[!duplicated(astyanax32$observed_on),]
+astyanax_capped32[order(astyanax_capped32[,'julian_day']),]
+
+battus_capped32 # n = 432
+astyanax_capped32 # n = 276
+
+## Battus
+battus_32_2019 <- subset(battus_capped32, year == "2019")
+battus_32_2019 # n = 52
+
+battus_32_2020 <- subset(battus_capped32, year == "2020")
+battus_32_2020 # n = 66
+
+battus_32_2021 <- subset(battus_capped32, year == "2021")
+battus_32_2021 # n = 93
+
+battus_32_2022 <- subset(battus_capped32, year == "2022")
+battus_32_2022 # n = 90
+
+## astyanax
+astyanax_32_2019 <- subset(astyanax_capped32, year == "2019")
+astyanax_32_2019 # n = 47
+
+astyanax_32_2020 <- subset(astyanax_capped32, year == "2020")
+astyanax_32_2020 # n = 40
+
+astyanax_32_2021 <- subset(astyanax_capped32, year == "2021")
+astyanax_32_2021 # n = 61
+
+astyanax_32_2022 <- subset(astyanax_capped32, year == "2022")
+astyanax_32_2022 # n = 56
+```
+
+```{r Lat. bin 33 - capping and subsetting by year}
+battus33<- subset(battus, latitudinal_bin == "33")
+astyanax33 <- subset(astyanax, latitudinal_bin == "33")
+
+battus_capped33 = battus33[!duplicated(battus33$observed_on),]
+battus_capped33[order(battus_capped33[,'julian_day']),]
+
+astyanax_capped33 = astyanax33[!duplicated(astyanax33$observed_on),]
+astyanax_capped33[order(astyanax_capped33[,'julian_day']),]
+
+battus_capped33 # n = 1044
+astyanax_capped33 # n = 602
+
+## Battus
+battus_33_2019 <- subset(battus_capped33, year == "2019")
+battus_33_2019 # n = 160
+
+battus_33_2020 <- subset(battus_capped33, year == "2020")
+battus_33_2020 # n = 149
+
+battus_33_2021 <- subset(battus_capped33, year == "2021")
+battus_33_2021 # n = 179
+
+battus_33_2022 <- subset(battus_capped33, year == "2022")
+battus_33_2022 # n = 201
+
+## astyanax
+astyanax_33_2019 <- subset(astyanax_capped33, year == "2019")
+astyanax_33_2019 # n = 101
+
+astyanax_33_2020 <- subset(astyanax_capped33, year == "2020")
+astyanax_33_2020 # n = 90
+
+astyanax_33_2021 <- subset(astyanax_capped33, year == "2021")
+astyanax_33_2021 # n = 105
+
+astyanax_33_2022 <- subset(astyanax_capped33, year == "2022")
+astyanax_33_2022 # n = 121
+```
+
+```{r Lat. bin 34 - capping and subsetting by year}
+battus34 <- subset(battus, latitudinal_bin == "34")
+astyanax34 <- subset(astyanax, latitudinal_bin == "34")
+
+battus_capped34 = battus34[!duplicated(battus34$observed_on),]
+battus_capped34[order(battus_capped34[,'julian_day']),]
+
+astyanax_capped34 = astyanax34[!duplicated(astyanax34$observed_on),]
+astyanax_capped34[order(astyanax_capped34[,'julian_day']),]
+
+battus_capped34 # n = 406
+astyanax_capped34 # n = 698
+
+## Battus
+battus_34_2019 <- subset(battus_capped34, year == "2019")
+battus_34_2019 # n = 66
+
+battus_34_2020 <- subset(battus_capped34, year == "2020")
+battus_34_2020 # n = 64
+
+battus_34_2021 <- subset(battus_capped34, year == "2021")
+battus_34_2021 # n = 87
+
+battus_34_2022 <- subset(battus_capped34, year == "2022")
+battus_34_2022 # n = 100
+
+## astyanax
+astyanax_34_2019 <- subset(astyanax_capped34, year == "2019")
+astyanax_34_2019 # n = 113
+
+astyanax_34_2020 <- subset(astyanax_capped34, year == "2020")
+astyanax_34_2020 # n = 123
+
+astyanax_34_2021 <- subset(astyanax_capped34, year == "2021")
+astyanax_34_2021 # n = 139
+
+astyanax_34_2022 <- subset(astyanax_capped34, year == "2022")
+astyanax_34_2022 # n = 141
+```
+
+```{r Lat. bin 35 - capping and subsetting by year}
+battus35 <- subset(battus, latitudinal_bin == "35")
+astyanax35 <- subset(astyanax, latitudinal_bin == "35")
+
+battus_capped35 = battus35[!duplicated(battus35$observed_on),]
+battus_capped35[order(battus_capped35[,'julian_day']),]
+
+astyanax_capped35 = astyanax35[!duplicated(astyanax35$observed_on),]
+astyanax_capped35[order(astyanax_capped35[,'julian_day']),]
+
+battus_capped35 # n = 820
+astyanax_capped35 # n = 815
+
+## Battus
+battus_35_2019 <- subset(battus_capped35, year == "2019")
+battus_35_2019 # n = 140
+
+battus_35_2020 <- subset(battus_capped35, year == "2020")
+battus_35_2020 # n = 153
+
+battus_35_2021 <- subset(battus_capped35, year == "2021")
+battus_35_2021 # n = 152
+
+battus_35_2022 <- subset(battus_capped35, year == "2022")
+battus_35_2022 # n = 171
+
+## astyanax
+astyanax_35_2019 <- subset(astyanax_capped35, year == "2019")
+astyanax_35_2019 # n = 136
+
+astyanax_35_2020 <- subset(astyanax_capped35, year == "2020")
+astyanax_35_2020 # n = 150
+
+astyanax_35_2021 <- subset(astyanax_capped35, year == "2021")
+astyanax_35_2021 # n = 149
+
+astyanax_35_2022 <- subset(astyanax_capped35, year == "2022")
+astyanax_35_2022 # n = 139
+```
+
+```{r  Lat. bin 36 - capping and subsetting by year}
+battus36 <- subset(battus, latitudinal_bin == "36")
+astyanax36 <- subset(astyanax, latitudinal_bin == "36")
+
+battus_capped36 = battus36[!duplicated(battus36$observed_on),]
+battus_capped36[order(battus_capped36[,'julian_day']),]
+
+astyanax_capped36 = astyanax36[!duplicated(astyanax36$observed_on),]
+astyanax_capped36[order(astyanax_capped36[,'julian_day']),]
+
+battus_capped36 # n = 1070
+astyanax_capped36 # n = 968
+
+## Battus
+battus_36_2019 <- subset(battus_capped36, year == "2019")
+battus_36_2019 # n = 169
+
+battus_36_2020 <- subset(battus_capped36, year == "2020")
+battus_36_2020 # n = 169
+
+battus_36_2021 <- subset(battus_capped36, year == "2021")
+battus_36_2021 # n = 189
+
+battus_36_2022 <- subset(battus_capped36, year == "2022")
+battus_36_2022 # n = 199
+
+## astyanax
+astyanax_36_2019 <- subset(astyanax_capped36, year == "2019")
+astyanax_36_2019 # n = 152
+
+astyanax_36_2020 <- subset(astyanax_capped36, year == "2020")
+astyanax_36_2020 # n = 161
+
+astyanax_36_2021 <- subset(astyanax_capped36, year == "2021")
+astyanax_36_2021 # n = 158
+
+astyanax_36_2022 <- subset(astyanax_capped36, year == "2022")
+astyanax_36_2022 # n = 166
+```
+
+```{r Lat. bin 37 - capping and subsetting by year}
+battus37 <- subset(battus, latitudinal_bin == "37")
+astyanax37 <- subset(astyanax, latitudinal_bin == "37")
+
+battus_capped37 = battus37[!duplicated(battus37$observed_on),]
+battus_capped37[order(battus_capped37[,'julian_day']),]
+
+astyanax_capped37 = astyanax37[!duplicated(astyanax37$observed_on),]
+astyanax_capped37[order(astyanax_capped37[,'julian_day']),]
+
+battus_capped37 # n = 506
+astyanax_capped37 # n = 587
+
+## Battus
+battus_37_2019 <- subset(battus_capped37, year == "2019")
+battus_37_2019 # n = 75
+
+battus_37_2020 <- subset(battus_capped37, year == "2020")
+battus_37_2020 # n = 99
+
+battus_37_2021 <- subset(battus_capped37, year == "2021")
+battus_37_2021 # n = 106
+
+battus_37_2022 <- subset(battus_capped37, year == "2022")
+battus_37_2022 # n = 106
+
+## astyanax
+astyanax_37_2019 <- subset(astyanax_capped37, year == "2019")
+astyanax_37_2019 # n = 99
+
+astyanax_37_2020 <- subset(astyanax_capped37, year == "2020")
+astyanax_37_2020 # n = 107
+
+astyanax_37_2021 <- subset(astyanax_capped37, year == "2021")
+astyanax_37_2021 # n = 104
+
+astyanax_37_2022 <- subset(astyanax_capped37, year == "2022")
+astyanax_37_2022 # n = 109
+```
+
+```{r Lat. bin 38 - capping and subsetting by year}
+battus38 <- subset(battus, latitudinal_bin == "38")
+astyanax38 <- subset(astyanax, latitudinal_bin == "38")
+
+battus_capped38 = battus38[!duplicated(battus38$observed_on),]
+battus_capped38[order(battus_capped38[,'julian_day']),]
+
+astyanax_capped38 = astyanax38[!duplicated(astyanax38$observed_on),]
+astyanax_capped38[order(astyanax_capped38[,'julian_day']),]
+
+battus_capped38 # n = 528
+astyanax_capped38 # n = 635
+
+## Battus
+battus_38_2019 <- subset(battus_capped38, year == "2019")
+battus_38_2019 # n = 86
+
+battus_38_2020 <- subset(battus_capped38, year == "2020")
+battus_38_2020 # n = 97
+
+battus_38_2021 <- subset(battus_capped38, year == "2021")
+battus_38_2021 # n = 107
+
+battus_38_2022 <- subset(battus_capped38, year == "2022")
+battus_38_2022 # n = 134
+
+## astyanax
+astyanax_38_2019 <- subset(astyanax_capped38, year == "2019")
+astyanax_38_2019 # n = 121
+
+astyanax_38_2020 <- subset(astyanax_capped38, year == "2020")
+astyanax_38_2020 # n = 108
+
+astyanax_38_2021 <- subset(astyanax_capped38, year == "2021")
+astyanax_38_2021 # n = 121
+
+astyanax_38_2022 <- subset(astyanax_capped38, year == "2022")
+astyanax_38_2022 # n = 115
+```
+
+```{r Lat. bin 39 - capping and subsetting by year}
+battus39 <- subset(battus, latitudinal_bin == "39")
+astyanax39 <- subset(astyanax, latitudinal_bin == "39")
+
+battus_capped39 = battus39[!duplicated(battus39$observed_on),]
+battus_capped39[order(battus_capped39[,'julian_day']),]
+
+astyanax_capped39 = astyanax39[!duplicated(astyanax39$observed_on),]
+astyanax_capped39[order(astyanax_capped39[,'julian_day']),]
+
+battus_capped39 # n = 658
+astyanax_capped39 # n = 874
+
+## Battus
+battus_39_2019 <- subset(battus_capped39, year == "2019")
+battus_39_2019 # n = 125
+
+battus_39_2020 <- subset(battus_capped39, year == "2020")
+battus_39_2020 # n = 114
+
+battus_39_2021 <- subset(battus_capped39, year == "2021")
+battus_39_2021 # n = 134
+
+battus_39_2022 <- subset(battus_capped39, year == "2022")
+battus_39_2022 # n = 134
+
+## astyanax
+astyanax_39_2019 <- subset(astyanax_capped39, year == "2019")
+astyanax_39_2019 # n = 150
+
+astyanax_39_2020 <- subset(astyanax_capped39, year == "2020")
+astyanax_39_2020 # n = 145
+
+astyanax_39_2021 <- subset(astyanax_capped39, year == "2021")
+astyanax_39_2021 # n = 156
+
+astyanax_39_2022 <- subset(astyanax_capped39, year == "2022")
+astyanax_39_2022 # n = 140
+```
+
+```{r Lat. bin 40 - capping and subsetting by year}
+battus40 <- subset(battus, latitudinal_bin == "40")
+astyanax40 <- subset(astyanax, latitudinal_bin == "40")
+
+battus_capped40 = battus40[!duplicated(battus40$observed_on),]
+battus_capped40[order(battus_capped40[,'julian_day']),]
+
+astyanax_capped40 = astyanax40[!duplicated(astyanax40$observed_on),]
+astyanax_capped40[order(astyanax_capped40[,'julian_day']),]
+
+battus_capped40 # n = 329
+astyanax_capped40 # n = 750
+
+## Battus
+battus_40_2019 <- subset(battus_capped40, year == "2019")
+battus_40_2019 # n = 58
+
+battus_40_2020 <- subset(battus_capped40, year == "2020")
+battus_40_2020 # n = 35
+
+battus_40_2021 <- subset(battus_capped40, year == "2021")
+battus_40_2021 # n = 66
+
+battus_40_2022 <- subset(battus_capped40, year == "2022")
+battus_40_2022 # n = 76
+
+## astyanax
+astyanax_40_2019 <- subset(astyanax_capped40, year == "2019")
+astyanax_40_2019 # n = 132
+
+astyanax_40_2020 <- subset(astyanax_capped40, year == "2020")
+astyanax_40_2020 # n = 115
+
+astyanax_40_2021 <- subset(astyanax_capped40, year == "2021")
+astyanax_40_2021 # n = 137
+
+astyanax_40_2022 <- subset(astyanax_capped40, year == "2022")
+astyanax_40_2022 # n = 129
+```
+
+```{r Lat. bin 41 - capping and subsetting by year}
+battus41 <- subset(battus, latitudinal_bin == "41")
+astyanax41 <- subset(astyanax, latitudinal_bin == "41")
+
+battus_capped41 = battus41[!duplicated(battus41$observed_on),]
+battus_capped41[order(battus_capped41[,'julian_day']),]
+
+astyanax_capped41 = astyanax41[!duplicated(astyanax41$observed_on),]
+astyanax_capped41[order(astyanax_capped41[,'julian_day']),]
+
+battus_capped41 # n = 224
+astyanax_capped41 # n = 637
+
+## Battus
+battus_41_2019 <- subset(battus_capped41, year == "2019")
+battus_41_2019 # n = 38
+
+battus_41_2020 <- subset(battus_capped41, year == "2020")
+battus_41_2020 # n = 30
+
+battus_41_2021 <- subset(battus_capped41, year == "2021")
+battus_41_2021 # n = 59
+
+battus_41_2022 <- subset(battus_capped41, year == "2022")
+battus_41_2022 # n = 40
+
+## astyanax
+astyanax_41_2019 <- subset(astyanax_capped41, year == "2019")
+astyanax_41_2019 # n = 112
+
+astyanax_41_2020 <- subset(astyanax_capped41, year == "2020")
+astyanax_41_2020 # n = 103
+
+astyanax_41_2021 <- subset(astyanax_capped41, year == "2021")
+astyanax_41_2021 # n = 104
+
+astyanax_41_2022 <- subset(astyanax_capped41, year == "2022")
+astyanax_41_2022 # n = 111
+```
+
+```{r Lat. bin 42 - capping and subsetting by year}
+battus42 <- subset(battus, latitudinal_bin == "42")
+astyanax42 <- subset(astyanax, latitudinal_bin == "42")
+
+battus_capped42 = battus42[!duplicated(battus42$observed_on),]
+battus_capped42[order(battus_capped42[,'julian_day']),]
+
+astyanax_capped42 = astyanax42[!duplicated(astyanax42$observed_on),]
+astyanax_capped42[order(astyanax_capped42[,'julian_day']),]
+
+battus_capped42 # n = 95
+astyanax_capped42 # n = 588
+
+## Battus
+battus_42_2019 <- subset(battus_capped42, year == "2019")
+battus_42_2019 # n = 27*
+
+battus_42_2020 <- subset(battus_capped42, year == "2020")
+battus_42_2020 # n = 13*
+
+battus_42_2021 <- subset(battus_capped42, year == "2021")
+battus_42_2021 # n = 16*
+
+battus_42_2022 <- subset(battus_capped42, year == "2022")
+battus_42_2022 # n = 26*
+
+## astyanax
+astyanax_42_2019 <- subset(astyanax_capped42, year == "2019")
+astyanax_42_2019 # n = 92
+
+astyanax_42_2020 <- subset(astyanax_capped42, year == "2020")
+astyanax_42_2020 # n = 104
+
+astyanax_42_2021 <- subset(astyanax_capped42, year == "2021")
+astyanax_42_2021 # n = 89
+
+astyanax_42_2022 <- subset(astyanax_capped42, year == "2022")
+astyanax_42_2022 # n = 104
+```
+
+```{r  Lat. bin 43 - capping and subsetting by year}
+battus43 <- subset(battus, latitudinal_bin == "43")
+astyanax43 <- subset(astyanax, latitudinal_bin == "43")
+
+battus_capped43 = battus43[!duplicated(battus43$observed_on),]
+battus_capped43[order(battus_capped43[,'julian_day']),]
+
+astyanax_capped43 = astyanax43[!duplicated(astyanax43$observed_on),]
+astyanax_capped43[order(astyanax_capped43[,'julian_day']),]
+
+battus_capped43 # n = 48
+astyanax_capped43 # n = 342
+
+## Battus
+battus_43_2019 <- subset(battus_capped43, year == "2019")
+battus_43_2019 # n = 10*
+
+battus_43_2020 <- subset(battus_capped43, year == "2020")
+battus_43_2020 # n = 2*
+
+battus_43_2021 <- subset(battus_capped43, year == "2021")
+battus_43_2021 # n = 6*
+
+battus_43_2022 <- subset(battus_capped43, year == "2022")
+battus_43_2022 # n = 29*
+
+## astyanax
+astyanax_43_2019 <- subset(astyanax_capped43, year == "2019")
+astyanax_43_2019 # n = 59
+
+astyanax_43_2020 <- subset(astyanax_capped43, year == "2020")
+astyanax_43_2020 # n = 67
+
+astyanax_43_2021 <- subset(astyanax_capped43, year == "2021")
+astyanax_43_2021 # n = 68
+
+astyanax_43_2022 <- subset(astyanax_capped43, year == "2022")
+astyanax_43_2022 # n = 68
+```
+
+```{r Summary plots for Battus-astyanax longitudinal cutoff}
+# Zooming in on region of interest (eastern US)
+x_extent <- c(-105, -60)
+y_extent <- c(25, 45)
+
+sf_northamerica <- world |> 
+  filter(continent == "North America") |>
+  group_by(continent) |>
+  tally()
+
+
+# Battus
+battus29_sf <- st_as_sf(battus_capped29, coords = c("longitude", "latitude"), crs = "EPSG:4326")
+battus30_sf <- st_as_sf(battus_capped30, coords = c("longitude", "latitude"), crs = "EPSG:4326")
+battus31_sf <- st_as_sf(battus_capped31, coords = c("longitude", "latitude"), crs = "EPSG:4326")
+battus32_sf <- st_as_sf(battus_capped32, coords = c("longitude", "latitude"), crs = "EPSG:4326")
+battus33_sf <- st_as_sf(battus_capped33, coords = c("longitude", "latitude"), crs = "EPSG:4326")
+battus34_sf <- st_as_sf(battus_capped34, coords = c("longitude", "latitude"), crs = "EPSG:4326")
+battus35_sf <- st_as_sf(battus_capped35, coords = c("longitude", "latitude"), crs = "EPSG:4326")
+battus36_sf <- st_as_sf(battus_capped36, coords = c("longitude", "latitude"), crs = "EPSG:4326")
+battus37_sf <- st_as_sf(battus_capped37, coords = c("longitude", "latitude"), crs = "EPSG:4326")
+battus38_sf <- st_as_sf(battus_capped38, coords = c("longitude", "latitude"), crs = "EPSG:4326")
+battus39_sf <- st_as_sf(battus_capped39, coords = c("longitude", "latitude"), crs = "EPSG:4326")
+battus40_sf <- st_as_sf(battus_capped40, coords = c("longitude", "latitude"), crs = "EPSG:4326")
+battus41_sf <- st_as_sf(battus_capped41, coords = c("longitude", "latitude"), crs = "EPSG:4326")
+battus42_sf <- st_as_sf(battus_capped42, coords = c("longitude", "latitude"), crs = "EPSG:4326")
+battus43_sf <- st_as_sf(battus_capped43, coords = c("longitude", "latitude"), crs = "EPSG:4326")
+
+bat_plot <- ggplot(data = sf_northamerica) +
+  geom_sf() +
+  # geom_sf(data = battus29_sf, color = "midnightblue", shape = 5, alpha = 0.5) +
+  geom_sf(data = battus30_sf, color = "royalblue", shape = 5, alpha = 0.5) +
+  geom_sf(data = battus31_sf, color = "midnightblue", shape = 5, alpha = 0.5) +
+  geom_sf(data = battus32_sf, color = "royalblue", shape = 5, alpha = 0.5) +
+  geom_sf(data = battus33_sf, color = "midnightblue", shape = 5, alpha = 0.5) +
+  geom_sf(data = battus34_sf, color = "royalblue", shape = 5, alpha = 0.5) +
+  geom_sf(data = battus35_sf, color = "midnightblue", shape = 5, alpha = 0.5) +
+  geom_sf(data = battus36_sf, color = "royalblue", shape = 5, alpha = 0.5) +
+  geom_sf(data = battus37_sf, color = "midnightblue", shape = 5, alpha = 0.5) +
+  geom_sf(data = battus38_sf, color = "royalblue", shape = 5, alpha = 0.5) +
+  geom_sf(data = battus39_sf, color = "midnightblue", shape = 5, alpha = 0.5) +
+  geom_sf(data = battus40_sf, color = "royalblue", shape = 5, alpha = 0.5) +
+  geom_sf(data = battus41_sf, color = "midnightblue", shape = 5, alpha = 0.5) +
+  # geom_sf(data = battus42_sf, color = "royalblue", shape = 5, alpha = 0.5) +
+  # geom_sf(data = battus43_sf, color = "midnightblue", shape = 5, alpha = 0.5) +
+  coord_sf(xlim = x_extent, ylim = y_extent) +
+  theme_classic()
+
+# astyanax
+astyanax29_sf <- st_as_sf(astyanax_capped29, coords = c("longitude", "latitude"), crs = "EPSG:4326")
+astyanax30_sf <- st_as_sf(astyanax_capped30, coords = c("longitude", "latitude"), crs = "EPSG:4326")
+astyanax31_sf <- st_as_sf(astyanax_capped31, coords = c("longitude", "latitude"), crs = "EPSG:4326")
+astyanax32_sf <- st_as_sf(astyanax_capped32, coords = c("longitude", "latitude"), crs = "EPSG:4326")
+astyanax33_sf <- st_as_sf(astyanax_capped33, coords = c("longitude", "latitude"), crs = "EPSG:4326")
+astyanax34_sf <- st_as_sf(astyanax_capped34, coords = c("longitude", "latitude"), crs = "EPSG:4326")
+astyanax35_sf <- st_as_sf(astyanax_capped35, coords = c("longitude", "latitude"), crs = "EPSG:4326")
+astyanax36_sf <- st_as_sf(astyanax_capped36, coords = c("longitude", "latitude"), crs = "EPSG:4326")
+astyanax37_sf <- st_as_sf(astyanax_capped37, coords = c("longitude", "latitude"), crs = "EPSG:4326")
+astyanax38_sf <- st_as_sf(astyanax_capped38, coords = c("longitude", "latitude"), crs = "EPSG:4326")
+astyanax39_sf <- st_as_sf(astyanax_capped39, coords = c("longitude", "latitude"), crs = "EPSG:4326")
+astyanax40_sf <- st_as_sf(astyanax_capped40, coords = c("longitude", "latitude"), crs = "EPSG:4326")
+astyanax41_sf <- st_as_sf(astyanax_capped41, coords = c("longitude", "latitude"), crs = "EPSG:4326")
+astyanax42_sf <- st_as_sf(astyanax_capped42, coords = c("longitude", "latitude"), crs = "EPSG:4326")
+astyanax43_sf <- st_as_sf(astyanax_capped43, coords = c("longitude", "latitude"), crs = "EPSG:4326")
+
+ast_plot <- ggplot(data = sf_northamerica) +
+  geom_sf() +
+  # geom_sf(data = astyanax29_sf, color = "dodgerblue4", shape = 5, alpha = 0.5) +
+  geom_sf(data = astyanax30_sf, color = "dodgerblue", shape = 5, alpha = 0.5) +
+  geom_sf(data = astyanax31_sf, color = "dodgerblue4", shape = 5, alpha = 0.5) +
+  geom_sf(data = astyanax32_sf, color = "dodgerblue", shape = 5, alpha = 0.5) +
+  geom_sf(data = astyanax33_sf, color = "dodgerblue4", shape = 5, alpha = 0.5) +
+  geom_sf(data = astyanax34_sf, color = "dodgerblue", shape = 5, alpha = 0.5) +
+  geom_sf(data = astyanax35_sf, color = "dodgerblue4", shape = 5, alpha = 0.5) +
+  geom_sf(data = astyanax36_sf, color = "dodgerblue", shape = 5, alpha = 0.5) +
+  geom_sf(data = astyanax37_sf, color = "dodgerblue4", shape = 5, alpha = 0.5) +
+  geom_sf(data = astyanax38_sf, color = "dodgerblue", shape = 5, alpha = 0.5) +
+  geom_sf(data = astyanax39_sf, color = "dodgerblue4", shape = 5, alpha = 0.5) +
+  geom_sf(data = astyanax40_sf, color = "dodgerblue", shape = 5, alpha = 0.5) +
+  geom_sf(data = astyanax41_sf, color = "dodgerblue4", shape = 5, alpha = 0.5) +
+  # geom_sf(data = astyanax42_sf, color = "dodgerblue", shape = 5, alpha = 0.5) +
+  # geom_sf(data = astyanax43_sf, color = "dodgerblue4", shape = 5, alpha = 0.5) +
+  coord_sf(xlim = x_extent, ylim = y_extent) +
+  theme_classic()
+
+bat_plot
+ast_plot
+
+summary(astyanax_capped32) # min. long. is -102.37ºW, so we (retroactively) set -102.5ºW as the western cutoff for longitude
+```
+
+Important - Note that because we do not have enough data (n ≥ 30) for Battus in each lat_yr bin for 42 and 43ºN, we will not be able to use this data in phenesse. Same for L. a. astyanax in bin 29ºN. From this point forward in the analysis, we will only use data from bins 30 - 41ºN.
+
+Now that we know the boundaries for the Battus and astyanax data, we can streamline our treatment of the L. archippus data:
+
+```{r L. archippus data}
+a <- curl("https://raw.githubusercontent.com/jnherr/iNaturalist-phenology-project/main/l_archippus_iNat_data.csv")
+archippus <- read.csv(a, header = TRUE, sep = ",")
+head(archippus)
+
+length(archippus$id)
+a <- subset(archippus, select = c(id, observed_on, latitude, longitude, scientific_name) )
+head(a)
+
+archippus <- na.omit(a)
+length(archippus$id)
+
+# Adding dates to whole archippus dataset
+a.dates <- parse_date_time(archippus$observed_on, "ymd")
+a.months <- months(a.dates)
+a.year <- year(a.dates)
+a.day <- day(a.dates)
+days_of_the_year <- yday(a.dates) #  days since Jan 1
+archippus$julian_day <- days_of_the_year
+archippus$year <- a.year
+archippus$month <- a.months
+archippus$day <- a.day
+archippus
+
+# Adding longitudinal cutoff
+archippus <- archippus %>% filter(longitude > -102.5)
+summary(archippus)
+archippus
+```
+
+```{r Subsetting archippus data by latitudinal bin}
+# First subset all data by the total latitudinal range of interest.
+archippus <- archippus %>%
+  filter( latitude > "25", latitude < "45") %>%
+  filter(year > 2018)
+archippus
+
+# Next use the round() function to create a new column binning all latitudes into integer values.
+archippus$latitudinal_bin <- round(archippus$latitude)
+archippus <- archippus[order(archippus$latitudinal_bin, decreasing=F),]
+archippus
+
+# Check to ensure the data was binned correctly.
+head(archippus)
+tail(archippus) # looks good
+length(archippus$id)
+
+# This next step checks the sample size for each latitudinal bin.
+
+# 30ºN lat. bin
+length(which(archippus$latitudinal_bin==30))
+
+# 31ºN lat. bin
+length(which(archippus$latitudinal_bin==31))
+
+# 32ºN lat. bin
+length(which(archippus$latitudinal_bin==32))
+
+# 33ºN lat. bin
+length(which(archippus$latitudinal_bin==33))
+
+# 34ºN lat. bin
+length(which(archippus$latitudinal_bin==34))
+
+# 35ºN lat. bin
+length(which(archippus$latitudinal_bin==35))
+
+# 36ºN lat. bin
+length(which(archippus$latitudinal_bin==36))
+
+# 37ºN lat. bin
+length(which(archippus$latitudinal_bin==37))
+
+# 38ºN lat. bin
+length(which(archippus$latitudinal_bin==38))
+
+# 39ºN lat. bin
+length(which(archippus$latitudinal_bin==39))
+
+# 40ºN lat. bin
+length(which(archippus$latitudinal_bin==40))
+
+# 41ºN lat. bin
+length(which(archippus$latitudinal_bin==41))
+```
+
+```{r 30ºN archippus}
+archippus30 <- subset(archippus, latitudinal_bin == "30")
+
+archippus_capped30 = archippus30[!duplicated(archippus30$observed_on),]
+archippus_capped30[order(archippus_capped30[,'julian_day']),]
+
+archippus_capped30 # n = 518
+
+archippus_30_2019 <- subset(archippus_capped30, year == "2019")
+archippus_30_2019 # n = 77
+
+archippus_30_2020 <- subset(archippus_capped30, year == "2020")
+archippus_30_2020 # n = 116
+
+archippus_30_2021 <- subset(archippus_capped30, year == "2021")
+archippus_30_2021 # n = 174
+
+archippus_30_2022 <- subset(archippus_capped30, year == "2022")
+archippus_30_2022 # n = 151
+```
+
+```{r 31ºN archippus}
+archippus31 <- subset(archippus, latitudinal_bin == "31")
+
+archippus_capped31 = archippus31[!duplicated(archippus31$observed_on),]
+archippus_capped31[order(archippus_capped31[,'julian_day']),]
+
+archippus_capped31 # n = 266
+
+archippus_31_2019 <- subset(archippus_capped31, year == "2019")
+archippus_31_2019 # n = 36
+
+archippus_31_2020 <- subset(archippus_capped31, year == "2020")
+archippus_31_2020 # n = 68
+
+archippus_31_2021 <- subset(archippus_capped31, year == "2021")
+archippus_31_2021 # n = 103
+
+archippus_31_2022 <- subset(archippus_capped31, year == "2022")
+archippus_31_2022 # n = 59
+```
+
+```{r 32ºN archippus}
+archippus32 <- subset(archippus, latitudinal_bin == "32")
+
+archippus_capped32 = archippus32[!duplicated(archippus32$observed_on),]
+archippus_capped32[order(archippus_capped32[,'julian_day']),]
+
+archippus_capped32 # n = 196
+
+archippus_32_2019 <- subset(archippus_capped32, year == "2019")
+archippus_32_2019 # n = 31
+
+archippus_32_2020 <- subset(archippus_capped32, year == "2020")
+archippus_32_2020 # n = 47
+
+archippus_32_2021 <- subset(archippus_capped32, year == "2021")
+archippus_32_2021 # n = 68
+
+archippus_32_2022 <- subset(archippus_capped32, year == "2022")
+archippus_32_2022 # n = 50
+```
+
+```{r 33ºN archippus}
+archippus33 <- subset(archippus, latitudinal_bin == "33")
+
+archippus_capped33 = archippus33[!duplicated(archippus33$observed_on),]
+archippus_capped33[order(archippus_capped33[,'julian_day']),]
+
+archippus_capped33 # n = 422
+
+archippus_33_2019 <- subset(archippus_capped33, year == "2019")
+archippus_33_2019 # n = 124
+
+archippus_33_2020 <- subset(archippus_capped33, year == "2020")
+archippus_33_2020 # n = 75
+
+archippus_33_2021 <- subset(archippus_capped33, year == "2021")
+archippus_33_2021 # n = 138
+
+archippus_33_2022 <- subset(archippus_capped33, year == "2022")
+archippus_33_2022 # n = 85
+```
+
+```{r 34ºN archippus}
+archippus34 <- subset(archippus, latitudinal_bin == "34")
+
+archippus_capped34 = archippus34[!duplicated(archippus34$observed_on),]
+archippus_capped34[order(archippus_capped34[,'julian_day']),]
+
+archippus_capped34 # n = 229
+
+archippus_34_2019 <- subset(archippus_capped34, year == "2019")
+archippus_34_2019 # n = 54
+
+archippus_34_2020 <- subset(archippus_capped34, year == "2020")
+archippus_34_2020 # n = 50
+
+archippus_34_2021 <- subset(archippus_capped34, year == "2021")
+archippus_34_2021 # n = 61
+
+archippus_34_2022 <- subset(archippus_capped34, year == "2022")
+archippus_34_2022 # n = 64
+```
+
+```{r 35ºN archippus}
+archippus35 <- subset(archippus, latitudinal_bin == "35")
+
+archippus_capped35 = archippus35[!duplicated(archippus35$observed_on),]
+archippus_capped35[order(archippus_capped35[,'julian_day']),]
+
+archippus_capped35 # n = 251
+
+archippus_35_2019 <- subset(archippus_capped35, year == "2019")
+archippus_35_2019 # n = 37
+
+archippus_35_2020 <- subset(archippus_capped35, year == "2020")
+archippus_35_2020 # n = 75
+
+archippus_35_2021 <- subset(archippus_capped35, year == "2021")
+archippus_35_2021 # n = 71
+
+archippus_35_2022 <- subset(archippus_capped35, year == "2022")
+archippus_35_2022 # n = 68
+```
+
+```{r 36ºN archippus}
+archippus36 <- subset(archippus, latitudinal_bin == "36")
+
+archippus_capped36 = archippus36[!duplicated(archippus36$observed_on),]
+archippus_capped36[order(archippus_capped36[,'julian_day']),]
+
+archippus_capped36 # n = 375
+
+archippus_36_2019 <- subset(archippus_capped36, year == "2019")
+archippus_36_2019 # n = 77
+
+archippus_36_2020 <- subset(archippus_capped36, year == "2020")
+archippus_36_2020 # n = 96
+
+archippus_36_2021 <- subset(archippus_capped36, year == "2021")
+archippus_36_2021 # n = 101
+
+archippus_36_2022 <- subset(archippus_capped36, year == "2022")
+archippus_36_2022 # n = 101
+```
+
+```{r 37ºN archippus}
+archippus37 <- subset(archippus, latitudinal_bin == "37")
+
+archippus_capped37 = archippus37[!duplicated(archippus37$observed_on),]
+archippus_capped37[order(archippus_capped37[,'julian_day']),]
+
+archippus_capped37 # n = 206
+
+archippus_37_2019 <- subset(archippus_capped37, year == "2019")
+archippus_37_2019 # n = 34
+
+archippus_37_2020 <- subset(archippus_capped37, year == "2020")
+archippus_37_2020 # n = 46
+
+archippus_37_2021 <- subset(archippus_capped37, year == "2021")
+archippus_37_2021 # n = 61
+
+archippus_37_2022 <- subset(archippus_capped37, year == "2022")
+archippus_37_2022 # n = 65
+```
+
+```{r 38ºN archippus}
+archippus38 <- subset(archippus, latitudinal_bin == "38")
+
+archippus_capped38 = archippus38[!duplicated(archippus38$observed_on),]
+archippus_capped38[order(archippus_capped38[,'julian_day']),]
+
+archippus_capped38 # n = 203
+
+archippus_38_2019 <- subset(archippus_capped38, year == "2019")
+archippus_38_2019 # n = 42
+
+archippus_38_2020 <- subset(archippus_capped38, year == "2020")
+archippus_38_2020 # n = 40
+
+archippus_38_2021 <- subset(archippus_capped38, year == "2021")
+archippus_38_2021 # n = 61
+
+archippus_38_2022 <- subset(archippus_capped38, year == "2022")
+archippus_38_2022 # n = 60
+```
+
+```{r 39ºN archippus}
+archippus39 <- subset(archippus, latitudinal_bin == "39")
+
+archippus_capped39 = archippus39[!duplicated(archippus39$observed_on),]
+archippus_capped39[order(archippus_capped39[,'julian_day']),]
+
+archippus_capped39 # n = 447
+
+archippus_39_2019 <- subset(archippus_capped39, year == "2019")
+archippus_39_2019 # n = 92
+
+archippus_39_2020 <- subset(archippus_capped39, year == "2020")
+archippus_39_2020 # n = 104
+
+archippus_39_2021 <- subset(archippus_capped39, year == "2021")
+archippus_39_2021 # n = 128
+
+archippus_39_2022 <- subset(archippus_capped39, year == "2022")
+archippus_39_2022 # n = 123
+```
+
+```{r 40ºN archippus}
+archippus40 <- subset(archippus, latitudinal_bin == "40")
+
+archippus_capped40 = archippus40[!duplicated(archippus40$observed_on),]
+archippus_capped40[order(archippus_capped40[,'julian_day']),]
+
+archippus_capped40 # n = 367
+
+archippus_40_2019 <- subset(archippus_capped40, year == "2019")
+archippus_40_2019 # n = 70
+
+archippus_40_2020 <- subset(archippus_capped40, year == "2020")
+archippus_40_2020 # n = 96
+
+archippus_40_2021 <- subset(archippus_capped40, year == "2021")
+archippus_40_2021 # n = 94
+
+archippus_40_2022 <- subset(archippus_capped40, year == "2022")
+archippus_40_2022 # n = 107
+```
+
+```{r 41ºN archippus}
+archippus41 <- subset(archippus, latitudinal_bin == "41")
+
+archippus_capped41 = archippus41[!duplicated(archippus41$observed_on),]
+archippus_capped41[order(archippus_capped41[,'julian_day']),]
+
+archippus_capped41 # n = 388
+
+archippus_41_2019 <- subset(archippus_capped41, year == "2019")
+archippus_41_2019 # n = 91
+
+archippus_41_2020 <- subset(archippus_capped41, year == "2020")
+archippus_41_2020 # n = 106
+
+archippus_41_2021 <- subset(archippus_capped41, year == "2021")
+archippus_41_2021 # n = 84
+
+archippus_41_2022 <- subset(archippus_capped41, year == "2022")
+archippus_41_2022 # n = 107
+```
+
+```{r Plot of binned archippus data}
+# Zooming in on region of interest (eastern US)
+# x_extent <- c(-105, -60)
+# y_extent <- c(25, 45)
+
+# sf_northamerica <- world |> 
+  # filter(continent == "North America") |>
+  # group_by(continent) |>
+  # tally()                               # previously defined in chunk 22
+
+archippus30_sf <- st_as_sf(archippus_capped30, coords = c("longitude", "latitude"), crs = "EPSG:4326")
+archippus31_sf <- st_as_sf(archippus_capped31, coords = c("longitude", "latitude"), crs = "EPSG:4326")
+archippus32_sf <- st_as_sf(archippus_capped32, coords = c("longitude", "latitude"), crs = "EPSG:4326")
+archippus33_sf <- st_as_sf(archippus_capped33, coords = c("longitude", "latitude"), crs = "EPSG:4326")
+archippus34_sf <- st_as_sf(archippus_capped34, coords = c("longitude", "latitude"), crs = "EPSG:4326")
+archippus35_sf <- st_as_sf(archippus_capped35, coords = c("longitude", "latitude"), crs = "EPSG:4326")
+archippus36_sf <- st_as_sf(archippus_capped36, coords = c("longitude", "latitude"), crs = "EPSG:4326")
+archippus37_sf <- st_as_sf(archippus_capped37, coords = c("longitude", "latitude"), crs = "EPSG:4326")
+archippus38_sf <- st_as_sf(archippus_capped38, coords = c("longitude", "latitude"), crs = "EPSG:4326")
+archippus39_sf <- st_as_sf(archippus_capped39, coords = c("longitude", "latitude"), crs = "EPSG:4326")
+archippus40_sf <- st_as_sf(archippus_capped40, coords = c("longitude", "latitude"), crs = "EPSG:4326")
+archippus41_sf <- st_as_sf(archippus_capped41, coords = c("longitude", "latitude"), crs = "EPSG:4326")
+
+arch_plot <- ggplot(data = sf_northamerica) +
+  geom_sf() +
+  geom_sf(data = archippus30_sf, color = "orange", shape = 5, alpha = 0.5) +
+  geom_sf(data = archippus31_sf, color = "tomato", shape = 5, alpha = 0.5) +
+  geom_sf(data = archippus32_sf, color = "orange", shape = 5, alpha = 0.5) +
+  geom_sf(data = archippus33_sf, color = "tomato", shape = 5, alpha = 0.5) +
+  geom_sf(data = archippus34_sf, color = "orange", shape = 5, alpha = 0.5) +
+  geom_sf(data = archippus35_sf, color = "tomato", shape = 5, alpha = 0.5) +
+  geom_sf(data = archippus36_sf, color = "orange", shape = 5, alpha = 0.5) +
+  geom_sf(data = archippus37_sf, color = "tomato", shape = 5, alpha = 0.5) +
+  geom_sf(data = archippus38_sf, color = "orange", shape = 5, alpha = 0.5) +
+  geom_sf(data = archippus39_sf, color = "tomato", shape = 5, alpha = 0.5) +
+  geom_sf(data = archippus40_sf, color = "orange", shape = 5, alpha = 0.5) +
+  geom_sf(data = archippus41_sf, color = "tomato", shape = 5, alpha = 0.5) +
+  coord_sf(xlim = x_extent, ylim = y_extent) +
+  theme_classic()
+
+arch_plot
+```
+
+Applying the quantile_ci() function to estimate dates of onset (approximated as 10th percentile of observations) and offset (90th percentile) for data binned across separate years (2019 - 2022) in each latitudinal bin:
+
+```{r 30ºN phenesse estimates}
+# 2019
+quantile_ci(observations = battus_30_2019$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_30_2019$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_30_2019$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+
+quantile_ci(observations = battus_30_2019$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_30_2019$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_30_2019$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+
+#2020
+quantile_ci(observations = battus_30_2020$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_30_2020$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_30_2020$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+
+quantile_ci(observations = battus_30_2020$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_30_2020$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_30_2020$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+
+#2021
+quantile_ci(observations = battus_30_2021$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_30_2021$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_30_2021$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+
+quantile_ci(observations = battus_30_2021$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_30_2021$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_30_2021$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+
+#2022
+quantile_ci(observations = battus_30_2022$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_30_2022$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_30_2022$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+
+quantile_ci(observations = battus_30_2022$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_30_2022$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_30_2022$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+```
+
+```{r 31ºN phenesse estimates}
+# 2019
+quantile_ci(observations = battus_31_2019$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_31_2019$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_31_2019$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+
+quantile_ci(observations = battus_31_2019$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_31_2019$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_31_2019$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+
+#2020
+quantile_ci(observations = battus_31_2020$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_31_2020$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_31_2020$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+
+quantile_ci(observations = battus_31_2020$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_31_2020$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_31_2020$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+
+#2021
+quantile_ci(observations = battus_31_2021$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_31_2021$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_31_2021$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+
+quantile_ci(observations = battus_31_2021$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_31_2021$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_31_2021$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+
+#2022
+quantile_ci(observations = battus_31_2022$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_31_2022$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_31_2022$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+
+quantile_ci(observations = battus_31_2022$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_31_2022$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_31_2022$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+```
+
+```{r 32ºN phenesse estimates}
+# 2019
+quantile_ci(observations = battus_32_2019$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_32_2019$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_32_2019$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+
+quantile_ci(observations = battus_32_2019$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_32_2019$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_32_2019$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+
+#2020
+quantile_ci(observations = battus_32_2020$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_32_2020$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_32_2020$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+
+quantile_ci(observations = battus_32_2020$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_32_2020$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_32_2020$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+
+#2021
+quantile_ci(observations = battus_32_2021$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_32_2021$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_32_2021$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+
+quantile_ci(observations = battus_32_2021$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_32_2021$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_32_2021$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+
+#2022
+quantile_ci(observations = battus_32_2022$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_32_2022$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_32_2022$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+
+quantile_ci(observations = battus_32_2022$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_32_2022$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_32_2022$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+```
+
+```{r 33ºN phenesse estimates}
+# 2019
+quantile_ci(observations = battus_33_2019$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_33_2019$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_33_2019$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+
+quantile_ci(observations = battus_33_2019$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_33_2019$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_33_2019$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+
+#2020
+quantile_ci(observations = battus_33_2020$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_33_2020$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_33_2020$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+
+quantile_ci(observations = battus_33_2020$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_33_2020$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_33_2020$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+
+#2021
+quantile_ci(observations = battus_33_2021$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_33_2021$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_33_2021$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+
+quantile_ci(observations = battus_33_2021$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_33_2021$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_33_2021$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+
+#2022
+quantile_ci(observations = battus_33_2022$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_33_2022$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_33_2022$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+
+quantile_ci(observations = battus_33_2022$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_33_2022$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_33_2022$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+```
+
+```{r 34ºN phenesse estimates}
+# 2019
+quantile_ci(observations = battus_34_2019$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_34_2019$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_34_2019$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+
+quantile_ci(observations = battus_34_2019$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_34_2019$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_34_2019$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+
+#2020
+quantile_ci(observations = battus_34_2020$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_34_2020$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_34_2020$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+
+quantile_ci(observations = battus_34_2020$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_34_2020$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_34_2020$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+
+#2021
+quantile_ci(observations = battus_34_2021$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_34_2021$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_34_2021$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+
+quantile_ci(observations = battus_34_2021$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_34_2021$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_34_2021$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+
+#2022
+quantile_ci(observations = battus_34_2022$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_34_2022$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_34_2022$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+
+quantile_ci(observations = battus_34_2022$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_34_2022$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_34_2022$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+```
+
+```{r 35ºN phenesse estimates}
+# 2019
+quantile_ci(observations = battus_35_2019$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_35_2019$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_35_2019$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+
+quantile_ci(observations = battus_35_2019$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_35_2019$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_35_2019$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+
+#2020
+quantile_ci(observations = battus_35_2020$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_35_2020$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_35_2020$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+
+quantile_ci(observations = battus_35_2020$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_35_2020$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_35_2020$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+
+#2021
+quantile_ci(observations = battus_35_2021$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_35_2021$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_35_2021$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+
+quantile_ci(observations = battus_35_2021$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_35_2021$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_35_2019$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+
+#2022
+quantile_ci(observations = battus_35_2022$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_35_2022$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_35_2022$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+
+quantile_ci(observations = battus_35_2022$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_35_2022$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_35_2022$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+```
+
+```{r 36ºN phenesse estimates}
+# 2019
+quantile_ci(observations = battus_36_2019$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_36_2019$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_36_2019$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+
+quantile_ci(observations = battus_36_2019$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_36_2019$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_36_2019$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+
+#2020
+quantile_ci(observations = battus_36_2020$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_36_2020$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_36_2020$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+
+quantile_ci(observations = battus_36_2020$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_36_2020$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_36_2020$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+
+#2021
+quantile_ci(observations = battus_36_2021$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_36_2021$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_36_2021$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+
+quantile_ci(observations = battus_36_2021$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_36_2021$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_36_2021$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+
+#2022
+quantile_ci(observations = battus_36_2022$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_36_2022$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_36_2022$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+
+quantile_ci(observations = battus_36_2022$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_36_2022$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_36_2022$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+```
+
+```{r 37ºN phenesse estimates}
+# 2019
+quantile_ci(observations = battus_37_2019$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_37_2019$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_37_2019$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+
+quantile_ci(observations = battus_37_2019$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_37_2019$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_37_2019$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+
+#2020
+quantile_ci(observations = battus_37_2020$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_37_2020$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_37_2020$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+
+quantile_ci(observations = battus_37_2020$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_37_2020$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_37_2020$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+
+#2021
+quantile_ci(observations = battus_37_2021$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_37_2021$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_37_2021$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+
+quantile_ci(observations = battus_37_2021$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_37_2021$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_37_2021$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+
+#2022
+quantile_ci(observations = battus_37_2022$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_37_2022$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_37_2022$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+
+quantile_ci(observations = battus_37_2022$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_37_2022$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_37_2022$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+```
+
+```{r 38ºN phenesse estimates}
+# 2019
+quantile_ci(observations = battus_38_2019$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_38_2019$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_38_2019$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+
+quantile_ci(observations = battus_38_2019$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_38_2019$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_38_2019$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+
+#2020
+quantile_ci(observations = battus_38_2020$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_38_2020$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_38_2020$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+
+quantile_ci(observations = battus_38_2020$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_38_2020$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_38_2020$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+
+#2021
+quantile_ci(observations = battus_38_2021$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_38_2021$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_38_2021$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+
+quantile_ci(observations = battus_38_2021$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_38_2021$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_38_2021$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+
+#2022
+quantile_ci(observations = battus_38_2022$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_38_2022$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_38_2022$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+
+quantile_ci(observations = battus_38_2022$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_38_2022$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_38_2022$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+```
+
+```{r 39ºN phenesse estimates}
+# 2019
+quantile_ci(observations = battus_39_2019$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_39_2019$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_39_2019$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+
+quantile_ci(observations = battus_39_2019$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_39_2019$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_39_2019$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+
+#2020
+quantile_ci(observations = battus_39_2020$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_39_2020$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_39_2020$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+
+quantile_ci(observations = battus_39_2020$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_39_2020$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_39_2020$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+
+#2021
+quantile_ci(observations = battus_39_2021$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_39_2021$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_39_2021$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+
+quantile_ci(observations = battus_39_2021$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_39_2021$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_39_2021$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+
+#2022
+quantile_ci(observations = battus_39_2022$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_39_2022$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_39_2022$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+
+quantile_ci(observations = battus_39_2022$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_39_2022$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_39_2022$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+```
+
+```{r 40ºN phenesse estimates}
+# 2019
+quantile_ci(observations = battus_40_2019$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_40_2019$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_40_2019$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+
+quantile_ci(observations = battus_40_2019$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_40_2019$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_40_2019$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+
+#2020
+quantile_ci(observations = battus_40_2020$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_40_2020$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_40_2020$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+
+quantile_ci(observations = battus_40_2020$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_40_2020$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_40_2020$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+
+#2021
+quantile_ci(observations = battus_40_2021$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_40_2021$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_40_2021$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+
+quantile_ci(observations = battus_40_2021$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_40_2021$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_40_2021$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+
+#2022
+quantile_ci(observations = battus_40_2022$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_40_2022$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_40_2022$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+
+quantile_ci(observations = battus_40_2022$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_40_2022$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_40_2022$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+```
+
+```{r 41ºN phenesse estimates}
+# 2019
+quantile_ci(observations = battus_41_2019$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_41_2019$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_41_2019$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+
+quantile_ci(observations = battus_41_2019$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_41_2019$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_41_2019$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+
+#2020
+quantile_ci(observations = battus_41_2020$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_41_2020$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_41_2020$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+
+quantile_ci(observations = battus_41_2020$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_41_2020$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_41_2020$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+
+#2021
+quantile_ci(observations = battus_41_2021$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_41_2021$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_41_2021$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+
+quantile_ci(observations = battus_41_2021$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_41_2021$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_41_2021$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+
+#2022
+quantile_ci(observations = battus_41_2022$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_41_2022$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_41_2022$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+
+quantile_ci(observations = battus_41_2022$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_41_2022$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_41_2022$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+```
+
+This is the 2019 - 2022 filtered DF (created in Excel, using Excel functions to calculate onset and offset lag times and overlap of yearly flight times per latitudinal bin).
+
+Calculations done in Excel:
+
+    onset_lag = onset_doy(species X) - onset_doy(B. philenor)
+    
+    offset_lag = offset_doy(species X) - offset_doy(B. philenor)
+    
+    overlap = flight period overlap of B. philenor and species X (calculations        varied by individual onset/offset dates; see Excel spreadsheet)
+    
+* "doy" = day of year
+    
+```{r Importing organized dataset with quantile estimates}
+library(curl)
+QE_lmer_df <- curl("https://raw.githubusercontent.com/jnherr/iNaturalist-phenology-project/main/phenology_LMER_df.csv")
+QE_lmer_df <- read.csv(QE_lmer_df, header = TRUE, sep = ",")
+QE_lmer_df
+
+# Adding a year column
+QE_lmer_df$year = substr(QE_lmer_df$lat_yr, nchar(QE_lmer_df$lat_yr)-3, 7)
+
+# Adding a latitude column
+QE_lmer_df$lat = substr(QE_lmer_df$lat_yr, nchar(QE_lmer_df$lat_yr)-6, 2)
+```

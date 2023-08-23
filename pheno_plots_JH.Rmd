@@ -1,0 +1,385 @@
+---
+title: "pheno_plots_JH"
+output: html_document
+date: '2023-08-03'
+---
+Script for creating phenology plots including all three species: B. philenor, L. a. astyanax, and L. archippus.
+
+```{r Load packages}
+library(curl)
+library(ggplot2)
+library(tidyverse)
+library(dplyr)
+library(spData)
+library(sf)
+library(Rmisc)
+```
+
+```{r Template map of the US}
+x_extent <- c(-90, -70)
+y_extent <- c(25, 43)
+
+sf_northamerica <- world |> 
+  filter(continent == "North America") |>
+  group_by(continent) |>
+  tally()
+
+sf_northamerica <- ggplot(data = sf_northamerica) +
+  geom_sf() +
+  coord_sf(xlim = x_extent, ylim = y_extent) +
+  theme_classic()
+
+sf_northamerica
+```
+
+Loading the 2019 - 2022 filtered dataframe (created in Excel, using Excel functions to calculate onset and offset lag times and overlap of yearly flight times per latitudinal bin). This dataset was binned only by latitude, and the quantile estimates were calculated for each latitudinal bin (four years of data per bin).
+
+```{r 2019 - 2022 butterfly data}
+QE_lm1_df <- curl("https://raw.githubusercontent.com/jnherr/iNaturalist-phenology-project/main/phenology_LM1_cumulative_df.csv")
+QE_lm1_df <- read.csv(QE_lm1_df, header = TRUE, sep = ",")
+QE_lm1_df
+````
+
+```{r LM cumulative maps}
+# With error bars
+onset_all1 <- ggplot(data = QE_lm1_df, aes(x = onset_doy, y = lat, color = species)) +
+  geom_point(size = 2) +
+  geom_errorbar(aes(x = onset_doy, y = lat, xmax = onset_high_ci, xmin = onset_low_ci)) +
+  scale_color_manual(name = "Species",
+                     breaks = c('b_philenor', 'la_astyanax', 'l_archippus'),
+                     values = c("blue","skyblue3","orange")) +
+  labs(title = "Avg. onset estimates", color = "Species") +
+  xlab("Day of Year") +
+  ylab("Latitude (ºN)") +
+  theme_classic()
+
+# With line segments
+onset_all2 <- ggplot(data = QE_lm1_df, aes(x = onset_doy, y = lat, color = species)) +
+  geom_point(size = 2) +
+  geom_segment(aes(x = onset_low_ci, y = lat, xend = onset_high_ci, yend = lat)) +
+  scale_color_manual(name = "Species",
+                     breaks = c('b_philenor', 'la_astyanax', 'l_archippus'),
+                     values = c("blue","skyblue3","orange")) +
+  labs(title = "Avg. onset estimates", color = "Species") +
+  xlab("Day of Year") +
+  ylab("Latitude (ºN)") +
+  theme_classic()
+  
+onset_all1
+onset_all2
+```
+
+```{r LM Battus-astyanax map}
+# B. philenor and L. a. astyanax
+bat_ast_df <- subset(QE_lm1_df, !(species %in% c("l_archippus")))
+
+onset_bat_ast <- ggplot(data = bat_ast_df, aes(x = onset_doy, y = lat, color = species)) +
+  geom_point(size = 2) +
+  xlim(0, 200) +
+  # geom_errorbar(aes(x = onset_doy, y = lat, xmax = onset_high_ci, xmin = onset_low_ci)) +
+  geom_segment(aes(x = onset_low_ci, y = lat, xend = onset_high_ci, yend = lat)) +
+  scale_color_manual(name = "Species",
+                     breaks = c('b_philenor', 'la_astyanax'),
+                     values = c("blue","skyblue3")) +
+  # labs(title = "Avg. onset estimates - B. philenor and L. a. astyanax", color = "Species") +
+  xlab("Day of Year") +
+  ylab("Latitude (ºN)") +
+  theme_classic()
+
+onset_bat_ast
+```
+
+```{r LM Battus-archippus plot}
+# B. philenor and L. archippus
+bat_arch_df <- subset(QE_lm1_df, !(species %in% c("la_astyanax")))
+
+onset_bat_arch <- ggplot(data = bat_arch_df, aes(x = onset_doy, y = lat, color = species)) +
+  geom_point(size = 2) +
+  xlim(0, 200) +
+  # geom_errorbar(aes(x = onset_doy, y = lat, xmax = onset_high_ci, xmin = onset_low_ci)) +
+  geom_segment(aes(x = onset_low_ci, y = lat, xend = onset_high_ci, yend = lat)) +
+  scale_color_manual(name = "Species",
+                     breaks = c('b_philenor', 'l_archippus'),
+                     values = c("blue","orange")) +
+  # labs(title = "Avg. onset estimates - B. philenor and L. archippus", color = "Species") +
+  xlab("Day of Year") +
+  ylab("Latitude (ºN)") +
+  theme_classic()
+
+onset_bat_arch
+```
+
+Next step: plotting data for each year, 2019 - 2022 (data binned by latitude*year). Previously, I had averaged the quantile estimates across all four years, but now I'm interested in seeing if year has any noticeable effect on the phenesse onset estimates.
+
+```{r LMER butterfly data}
+QE_lmer_df <- curl("https://raw.githubusercontent.com/jnherr/iNaturalist-phenology-project/main/phenology_LMER_df.csv")
+QE_lmer_df <- read.csv(QE_lmer_df, header = TRUE, sep = ",")
+QE_lmer_df
+```
+
+```{r 2019 onset estimate plots}
+onset_2019_df <- subset(QE_lmer_df, (year %in% c("2019")))
+
+# With error bars
+onset_2019 <- ggplot(data = onset_2019_df, aes(x = onset_doy, y = lat, color = species)) +
+  geom_point(size = 2) +
+  xlim(0, 250) +
+  geom_errorbar(aes(x = onset_doy, y = lat, xmax = onset_high_ci, xmin = onset_low_ci)) +
+  scale_color_manual(name = "Species",
+                     breaks = c('b_philenor', 'la_astyanax', 'l_archippus'),
+                     values = c("blue","skyblue3","orange")) +
+  labs(title = "Avg. onset estimates (2019)", color = "Species") +
+  xlab("Day of Year") +
+  ylab("Latitude (ºN)") +
+  theme_classic()
+
+# B. philenor and L. a. astyanax
+bat_ast_2019 <- subset(onset_2019_df, !(species %in% c("l_archippus")))
+
+onset_bat_ast_2019 <- ggplot(data = bat_ast_2019, aes(x = onset_doy, y = lat, color = species)) +
+  geom_point(size = 2) +
+  xlim(0, 250) +
+  #geom_errorbar(aes(x = onset_doy, y = lat, xmax = onset_high_ci, xmin = onset_low_ci)) +
+  geom_segment(aes(x = onset_low_ci, y = lat, xend = onset_high_ci, yend = lat)) +
+  scale_color_manual(name = "Species",
+                     breaks = c('b_philenor', 'la_astyanax'),
+                     values = c("blue","skyblue3")) +
+  labs(title = "Avg. onset estimates - B. philenor and L. a. astyanax (2019)", color = "Species") +
+  xlab("Day of Year") +
+  ylab("Latitude (ºN)") +
+  theme_classic()
+
+# B. philenor and L. archippus
+bat_arch_2019 <- subset(onset_2019_df, !(species %in% c("la_astyanax")))
+
+onset_bat_arch_2019 <- ggplot(data = bat_arch_2019, aes(x = onset_doy, y = lat, color = species)) +
+  geom_point(size = 2) +
+  xlim(0, 250) +
+  #geom_errorbar(aes(x = onset_doy, y = lat, xmax = onset_high_ci, xmin = onset_low_ci)) +
+  geom_segment(aes(x = onset_low_ci, y = lat, xend = onset_high_ci, yend = lat)) +
+  scale_color_manual(name = "Species",
+                     breaks = c('b_philenor', 'l_archippus'),
+                     values = c("blue","orange")) +
+  labs(title = "Avg. onset estimates - B. philenor and L. archippus (2019)", color = "Species") +
+  xlab("Day of Year") +
+  ylab("Latitude (ºN)") +
+  theme_classic()
+
+
+
+onset_2019
+onset_bat_ast_2019
+onset_bat_arch_2019
+```
+
+```{r 2020 onset estimate plots}
+onset_2020_df <- subset(QE_lmer_df, (year %in% c("2020")))
+
+# With error bars
+onset_2020 <- ggplot(data = onset_2020_df, aes(x = onset_doy, y = lat, color = species)) +
+  geom_point(size = 2) +
+  xlim(0, 250) +
+  geom_errorbar(aes(x = onset_doy, y = lat, xmax = onset_high_ci, xmin = onset_low_ci)) +
+  scale_color_manual(name = "Species",
+                     breaks = c('b_philenor', 'la_astyanax', 'l_archippus'),
+                     values = c("blue","skyblue3","orange")) +
+  labs(title = "Avg. onset estimates (2020)", color = "Species") +
+  xlab("Day of Year") +
+  ylab("Latitude (ºN)") +
+  theme_classic()
+
+# B. philenor and L. a. astyanax
+bat_ast_2020 <- subset(onset_2020_df, !(species %in% c("l_archippus")))
+
+onset_bat_ast_2020 <- ggplot(data = bat_ast_2020, aes(x = onset_doy, y = lat, color = species)) +
+  geom_point(size = 2) +
+  xlim(0, 250) +
+  #geom_errorbar(aes(x = onset_doy, y = lat, xmax = onset_high_ci, xmin = onset_low_ci)) +
+  geom_segment(aes(x = onset_low_ci, y = lat, xend = onset_high_ci, yend = lat)) +
+  scale_color_manual(name = "Species",
+                     breaks = c('b_philenor', 'la_astyanax'),
+                     values = c("blue","skyblue3")) +
+  labs(title = "Avg. onset estimates - B. philenor and L. a. astyanax (2020)", color = "Species") +
+  xlab("Day of Year") +
+  ylab("Latitude (ºN)") +
+  theme_classic()
+
+# B. philenor and L. archippus
+bat_arch_2020 <- subset(onset_2020_df, !(species %in% c("la_astyanax")))
+
+onset_bat_arch_2020 <- ggplot(data = bat_arch_2020, aes(x = onset_doy, y = lat, color = species)) +
+  geom_point(size = 2) +
+  xlim(0, 250) +
+  #geom_errorbar(aes(x = onset_doy, y = lat, xmax = onset_high_ci, xmin = onset_low_ci)) +
+  geom_segment(aes(x = onset_low_ci, y = lat, xend = onset_high_ci, yend = lat)) +
+  scale_color_manual(name = "Species",
+                     breaks = c('b_philenor', 'l_archippus'),
+                     values = c("blue","orange")) +
+  labs(title = "Avg. onset estimates - B. philenor and L. archippus (2020)", color = "Species") +
+  xlab("Day of Year") +
+  ylab("Latitude (ºN)") +
+  theme_classic()
+
+
+
+onset_2020
+onset_bat_ast_2020
+onset_bat_arch_2020
+```
+
+```{r 2021 onset estimate plots}
+onset_2021_df <- subset(QE_lmer_df, (year %in% c("2021")))
+
+# With error bars
+onset_2021 <- ggplot(data = onset_2021_df, aes(x = onset_doy, y = lat, color = species)) +
+  geom_point(size = 2) +
+  xlim(0, 200) +
+  geom_errorbar(aes(x = onset_doy, y = lat, xmax = onset_high_ci, xmin = onset_low_ci)) +
+  scale_color_manual(name = "Species",
+                     breaks = c('b_philenor', 'la_astyanax', 'l_archippus'),
+                     values = c("blue","skyblue3","orange")) +
+  labs(title = "Avg. onset estimates (2021)", color = "Species") +
+  xlab("Day of Year") +
+  ylab("Latitude (ºN)") +
+  theme_classic()
+
+# B. philenor and L. a. astyanax
+bat_ast_2021 <- subset(onset_2021_df, !(species %in% c("l_archippus")))
+
+onset_bat_ast_2021 <- ggplot(data = bat_ast_2021, aes(x = onset_doy, y = lat, color = species)) +
+  geom_point(size = 2) +
+  xlim(0, 200) +
+  #geom_errorbar(aes(x = onset_doy, y = lat, xmax = onset_high_ci, xmin = onset_low_ci)) +
+  geom_segment(aes(x = onset_low_ci, y = lat, xend = onset_high_ci, yend = lat)) +
+  scale_color_manual(name = "Species",
+                     breaks = c('b_philenor', 'la_astyanax'),
+                     values = c("blue","skyblue3")) +
+  labs(title = "Avg. onset estimates - B. philenor and L. a. astyanax (2021)", color = "Species") +
+  xlab("Day of Year") +
+  ylab("Latitude (ºN)") +
+  theme_classic()
+
+# B. philenor and L. archippus
+bat_arch_2021 <- subset(onset_2021_df, !(species %in% c("la_astyanax")))
+
+onset_bat_arch_2021 <- ggplot(data = bat_arch_2021, aes(x = onset_doy, y = lat, color = species)) +
+  geom_point(size = 2) +
+  xlim(0, 200) +
+  #geom_errorbar(aes(x = onset_doy, y = lat, xmax = onset_high_ci, xmin = onset_low_ci)) +
+  geom_segment(aes(x = onset_low_ci, y = lat, xend = onset_high_ci, yend = lat)) +
+  scale_color_manual(name = "Species",
+                     breaks = c('b_philenor', 'l_archippus'),
+                     values = c("blue","orange")) +
+  labs(title = "Avg. onset estimates - B. philenor and L. archippus (2021)", color = "Species") +
+  xlab("Day of Year") +
+  ylab("Latitude (ºN)") +
+  theme_classic()
+
+
+
+onset_2021
+onset_bat_ast_2021
+onset_bat_arch_2021
+```
+
+```{r 2022 onset estimate plots}
+onset_2022_df <- subset(QE_lmer_df, (year %in% c("2022")))
+
+# With error bars
+onset_2022 <- ggplot(data = onset_2022_df, aes(x = onset_doy, y = lat, color = species)) +
+  geom_point(size = 2) +
+  xlim(0, 200) +
+  geom_errorbar(aes(x = onset_doy, y = lat, xmax = onset_high_ci, xmin = onset_low_ci)) +
+  scale_color_manual(name = "Species",
+                     breaks = c('b_philenor', 'la_astyanax', 'l_archippus'),
+                     values = c("blue","skyblue3","orange")) +
+  labs(title = "Avg. onset estimates (2022)", color = "Species") +
+  xlab("Day of Year") +
+  ylab("Latitude (ºN)") +
+  theme_classic()
+
+# B. philenor and L. a. astyanax
+bat_ast_2022 <- subset(onset_2022_df, !(species %in% c("l_archippus")))
+
+onset_bat_ast_2022 <- ggplot(data = bat_ast_2022, aes(x = onset_doy, y = lat, color = species)) +
+  geom_point(size = 2) +
+  xlim(0, 200) +
+  #geom_errorbar(aes(x = onset_doy, y = lat, xmax = onset_high_ci, xmin = onset_low_ci)) +
+  geom_segment(aes(x = onset_low_ci, y = lat, xend = onset_high_ci, yend = lat)) +
+  scale_color_manual(name = "Species",
+                     breaks = c('b_philenor', 'la_astyanax'),
+                     values = c("blue","skyblue3")) +
+  labs(title = "Avg. onset estimates - B. philenor and L. a. astyanax (2022)", color = "Species") +
+  xlab("Day of Year") +
+  ylab("Latitude (ºN)") +
+  theme_classic()
+
+# B. philenor and L. archippus
+bat_arch_2022 <- subset(onset_2022_df, !(species %in% c("la_astyanax")))
+
+onset_bat_arch_2022 <- ggplot(data = bat_arch_2022, aes(x = onset_doy, y = lat, color = species)) +
+  geom_point(size = 2) +
+  xlim(0, 200) +
+  #geom_errorbar(aes(x = onset_doy, y = lat, xmax = onset_high_ci, xmin = onset_low_ci)) +
+  geom_segment(aes(x = onset_low_ci, y = lat, xend = onset_high_ci, yend = lat)) +
+  scale_color_manual(name = "Species",
+                     breaks = c('b_philenor', 'l_archippus'),
+                     values = c("blue","orange")) +
+  labs(title = "Avg. onset estimates - B. philenor and L. archippus (2022)", color = "Species") +
+  xlab("Day of Year") +
+  ylab("Latitude (ºN)") +
+  theme_classic()
+
+
+
+onset_2022
+onset_bat_ast_2022
+onset_bat_arch_2022
+```
+
+```{r Avg. annual onset dates per species}
+avg_onset_df <- QE_lmer_df %>%
+  select(onset_doy, year, species) %>%
+  group_by(species, year) %>%
+  mutate(species_annual_onset = mean(onset_doy)) %>%
+  ungroup() %>%
+  select(species_annual_onset, year, species) %>%
+  group_by(year) %>%
+  distinct()
+
+avg_onset_df    # "species_annual_onset" is the annual avg. onset time per species per year
+```
+
+```{r Plot comparing annual onsets by spp.}
+avg_onset_plot <- ggplot(data = avg_onset_df, aes(x = year, y = species_annual_onset, color = species)) +
+  geom_line(size = 1) +
+  scale_color_manual(name = "Species",
+                     breaks = c("b_philenor", "la_astyanax", "l_archippus"),
+                     values = c("blue","lightblue", "orange")) +
+  # labs(title = "Avg. annual onset estimates", color = "Species") +
+  xlab("Year") +
+  ylab("Estimated onset day") +
+  theme_classic()
+
+avg_onset_plot
+```
+
+```{r Calculating avg. annual onset w/ SD, SE, CI}
+avg_onsets = summarySE(data = QE_lmer_df, measurevar = "onset_doy", groupvars = c("year","species"))
+
+avg_onsets # Here, "onset_doy" is the mean onset date by spp*yr.
+```
+
+```{r Box and whisker plots of avg. onset}
+avg_onset_plot2 <- ggplot(data = avg_onsets, aes(x = year, y = onset_doy)) +
+  geom_point(aes(color = species), size = 4) +
+  geom_errorbar(aes(x = year, y = onset_doy, ymax = onset_doy + ci, ymin = onset_doy - ci, color = species), width = 0.2) +
+  scale_color_manual(name = "Species",
+                    breaks = c("b_philenor", "la_astyanax", "l_archippus"),
+                    values = c("blue","lightblue", "orange")) +
+  xlab("Year") +
+  ylab("Estimated onset day") +
+  theme_classic()
+
+avg_onset_plot2
+```

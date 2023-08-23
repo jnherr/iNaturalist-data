@@ -1,0 +1,785 @@
+---
+title: "phenology_estimates_LM_JH"
+output: html_document
+date: '2023-08-03'
+---
+This script calculates the phenology estimates for B. philenor, L. a. astyanax, and L. archippus for the years 2019 - 2022 and latitudes 29º to 43º N. Rather than binning by latitude*year, this script only bins by latitude. We did this in order to increase data density for each quantile estimate and to compute more precise confidence intervals. Note that the phenology estimates calculated here will likely be different from the estimates for data binned by latitude AND year (the estimates used in our linear model).
+
+
+Load packages
+```{r}
+library(curl)
+library(ggplot2)
+library(tidyverse)
+library(dplyr)
+library(lubridate)
+library(sf)
+library(spData)
+library(phenesse)
+```
+
+Note - the data in my GitHub was downloaded from iNaturalist under the following parameters:
+- quality grade: research
+- reviewed: any
+- identifications: most agree
+- captive/cultivated: no
+- date range: 01-01-2002 through 12-31-2022 (later pared down to 01-01-2015 through 12-31-2021)
+
+```{r Battus data}
+b <- curl("https://raw.githubusercontent.com/jnherr/iNaturalist-phenology-project/main/b_philenor_iNat_data.csv")
+battus <- read.csv(b, header = TRUE, sep = ",")
+head(battus)
+
+length(battus$id) ### Sample size: 37984
+b <- subset(battus, select = c(id, observed_on, latitude, longitude, scientific_name) )
+head(b)
+
+b <- b %>% filter(scientific_name %in% c("Battus philenor", "Battus philenor philenor")) #getting rid of other subspecies, e.g. B. p. hirsuta
+length(b$id) # n = 36592
+battus <- na.omit(b)
+length(battus$id) ### New sample size: 36479
+
+# Adding dates to whole Battus dataset
+b.dates <- parse_date_time(battus$observed_on, "ymd")
+b.months <- months(b.dates)
+b.year <- year(b.dates)
+b.day <- day(b.dates)
+days_of_the_year <- yday(b.dates) #  days since Jan 1
+battus$julian_day <- days_of_the_year
+battus$year <- b.year
+battus$month <- b.months
+battus$day <- b.day
+battus
+
+# Adding longitudinal cutoff (see rationale for this cutoff in the plots made later in this document)
+battus <- battus %>% filter(longitude > -102.5)
+summary(battus)
+battus
+```
+
+```{r L. a. astyanax data}
+l <- curl("https://raw.githubusercontent.com/jnherr/iNaturalist-phenology-project/main/l_a_astyanax_iNat_data.csv")
+astyanax <- read.csv(l, header = TRUE, sep = ",")
+head(astyanax)
+
+length(astyanax$id) ### Sample Size: 25148
+l <- subset(astyanax, select = c(id, observed_on, latitude, longitude, scientific_name) )
+
+l <- l %>% filter(scientific_name %in% "Limenitis arthemis astyanax") # getting rid of other subspecies (namely L. a. arizonensis)
+length(l$id) # n = 24435
+astyanax <- na.omit(l)
+length(astyanax$id) ### New Sample Size: 24376
+
+# Adding dates to whole Limenitis dataset
+l.dates <- parse_date_time(astyanax$observed_on, "ymd")
+l.months <- months(l.dates)
+l.year <- year(l.dates)
+l.day <- day(l.dates)
+days_of_the_year <- yday(l.dates) #  days since Jan 1
+astyanax$julian_day <- days_of_the_year
+astyanax$year <- l.year
+astyanax$month <- l.months
+astyanax$day <- l.day
+astyanax
+
+# Adding longitudinal cutoff
+astyanax <- astyanax %>% filter(longitude > -102.5)
+summary(astyanax)
+astyanax
+```
+
+```{r L. archippus data}
+a <- curl("https://raw.githubusercontent.com/jnherr/iNaturalist-phenology-project/main/l_archippus_iNat_data.csv")
+archippus <- read.csv(a, header = TRUE, sep = ",")
+head(archippus)
+
+length(archippus$id)
+a <- subset(archippus, select = c(id, observed_on, latitude, longitude, scientific_name) )
+head(a)
+
+archippus <- na.omit(a)
+length(archippus$id)
+
+# Adding dates to whole archippus dataset
+a.dates <- parse_date_time(archippus$observed_on, "ymd")
+a.months <- months(a.dates)
+a.year <- year(a.dates)
+a.day <- day(a.dates)
+days_of_the_year <- yday(a.dates) #  days since Jan 1
+archippus$julian_day <- days_of_the_year
+archippus$year <- a.year
+archippus$month <- a.months
+archippus$day <- a.day
+archippus
+
+# Adding longitudinal cutoff
+archippus <- archippus %>% filter(longitude > -102.5)
+summary(archippus)
+archippus
+```
+
+```{r B. philenor by latitude}
+# First subset all data by the total latitudinal range of interest.
+battus <- battus %>%
+  filter( latitude > "25", latitude < "43") %>%
+  filter(year > 2018)
+battus
+
+# Next use the round() function to create a new column binning all latitudes into integer values.
+battus$latitudinal_bin <- round(battus$latitude)
+battus <- battus[order(battus$latitudinal_bin, decreasing=F),]
+battus
+
+# Check to ensure the data was binned correctly.
+head(battus)
+tail(battus) # looks good
+length(battus$id) # n = 26364
+
+# This next step checks the sample size for each latitudinal bin.
+
+# 25ºN lat. bin
+length(which(battus$latitudinal_bin==25))
+
+# 26ºN lat. bin
+length(which(battus$latitudinal_bin==26))
+
+# 27ºN lat. bin
+length(which(battus$latitudinal_bin==27))
+
+# 28ºN lat. bin
+length(which(battus$latitudinal_bin==28))
+
+# 29ºN lat. bin
+length(which(battus$latitudinal_bin==29))
+
+# 30ºN lat. bin
+length(which(battus$latitudinal_bin==30))
+
+# 31ºN lat. bin
+length(which(battus$latitudinal_bin==31))
+
+# 32ºN lat. bin
+length(which(battus$latitudinal_bin==32))
+
+# 33ºN lat. bin
+length(which(battus$latitudinal_bin==33))
+
+# 34ºN lat. bin
+length(which(battus$latitudinal_bin==34))
+
+# 35ºN lat. bin
+length(which(battus$latitudinal_bin==35))
+
+# 36ºN lat. bin
+length(which(battus$latitudinal_bin==36))
+
+# 37ºN lat. bin
+length(which(battus$latitudinal_bin==37))
+
+# 38ºN lat. bin
+length(which(battus$latitudinal_bin==38))
+
+# 39ºN lat. bin
+length(which(battus$latitudinal_bin==39))
+
+# 40ºN lat. bin
+length(which(battus$latitudinal_bin==40))
+
+# 41ºN lat. bin
+length(which(battus$latitudinal_bin==41))
+
+# 42ºN lat. bin
+length(which(battus$latitudinal_bin==42))
+
+# 43ºN lat. bin
+length(which(battus$latitudinal_bin==43)) # all binned sample counts exceed the minimum of 30 data points; looks good
+
+# 44ºN lat. bin
+length(which(battus$latitudinal_bin==44)) # insufficient data points
+
+# 45ºN lat. bin
+length(which(battus$latitudinal_bin==45)) # insufficient data points
+```
+
+```{r L. a. astyanax by latitude}
+# First subset all data by the total latitudinal range of interest.
+astyanax <- astyanax %>%
+  filter( latitude > "25", latitude < "43") %>%
+  filter(year > 2018)
+astyanax
+
+# Next use the round() function to create a new column binning all latitudes into integer values.
+astyanax$latitudinal_bin <- round(astyanax$latitude)
+astyanax <- astyanax[order(astyanax$latitudinal_bin, decreasing=F),]
+astyanax
+
+# Check to ensure the data was binned correctly.
+head(astyanax)
+tail(astyanax) # looks good
+length(astyanax$id) # n = 21307
+
+# This next step checks the sample size for each latitudinal bin.
+
+# 25ºN lat. bin
+length(which(astyanax$latitudinal_bin==25)) # insufficient data points
+
+# 26ºN lat. bin
+length(which(astyanax$latitudinal_bin==26)) # insufficient data points
+
+# 27ºN lat. bin
+length(which(astyanax$latitudinal_bin==27)) # insufficient data points
+
+# 28ºN lat. bin
+length(which(astyanax$latitudinal_bin==28)) # insufficient data points
+
+# 29ºN lat. bin
+length(which(astyanax$latitudinal_bin==29))  # this is where we start to get                                                    # sufficient data for phenesse
+                                              # n = 65
+
+# 30ºN lat. bin
+length(which(astyanax$latitudinal_bin==30))
+
+# 31ºN lat. bin
+length(which(astyanax$latitudinal_bin==31))
+
+# 32ºN lat. bin
+length(which(astyanax$latitudinal_bin==32))
+
+# 33ºN lat. bin
+length(which(astyanax$latitudinal_bin==33))
+
+# 34ºN lat. bin
+length(which(astyanax$latitudinal_bin==34))
+
+# 35ºN lat. bin
+length(which(astyanax$latitudinal_bin==35))
+
+# 36ºN lat. bin
+length(which(astyanax$latitudinal_bin==36))
+
+# 37ºN lat. bin
+length(which(astyanax$latitudinal_bin==37))
+
+# 38ºN lat. bin
+length(which(astyanax$latitudinal_bin==38))
+
+# 39ºN lat. bin
+length(which(astyanax$latitudinal_bin==39))
+
+# 40ºN lat. bin
+length(which(astyanax$latitudinal_bin==40))
+
+# 41ºN lat. bin
+length(which(astyanax$latitudinal_bin==41))
+
+# 42ºN lat. bin
+length(which(astyanax$latitudinal_bin==42))
+
+# 43ºN lat. bin
+length(which(astyanax$latitudinal_bin==43)) # all binned sample counts exceed the minimum of 30 data points; also looks good
+```
+
+```{r Data filtering}
+# First subset all data by the total latitudinal range of interest.
+archippus <- archippus %>%
+  filter( latitude > "25", latitude < "45") %>%
+  filter(year > 2018)
+archippus
+
+# Next use the round() function to create a new column binning all latitudes into integer values.
+archippus$latitudinal_bin <- round(archippus$latitude)
+archippus <- archippus[order(archippus$latitudinal_bin, decreasing=F),]
+archippus
+
+# Check to ensure the data was binned correctly.
+head(archippus)
+tail(archippus) # looks good
+length(archippus$id)
+
+# This next step checks the sample size for each latitudinal bin.
+
+# 29ºN lat. bin
+length(which(archippus$latitudinal_bin==29))
+
+# 30ºN lat. bin
+length(which(archippus$latitudinal_bin==30))
+
+# 31ºN lat. bin
+length(which(archippus$latitudinal_bin==31))
+
+# 32ºN lat. bin
+length(which(archippus$latitudinal_bin==32))
+
+# 33ºN lat. bin
+length(which(archippus$latitudinal_bin==33))
+
+# 34ºN lat. bin
+length(which(archippus$latitudinal_bin==34))
+
+# 35ºN lat. bin
+length(which(archippus$latitudinal_bin==35))
+
+# 36ºN lat. bin
+length(which(archippus$latitudinal_bin==36))
+
+# 37ºN lat. bin
+length(which(archippus$latitudinal_bin==37))
+
+# 38ºN lat. bin
+length(which(archippus$latitudinal_bin==38))
+
+# 39ºN lat. bin
+length(which(archippus$latitudinal_bin==39))
+
+# 40ºN lat. bin
+length(which(archippus$latitudinal_bin==40))
+
+# 41ºN lat. bin
+length(which(archippus$latitudinal_bin==41))
+
+# 42ºN lat. bin
+length(which(archippus$latitudinal_bin==42))
+
+# 43ºN lat. bin
+length(which(archippus$latitudinal_bin==43))
+```
+
+```{r Capping binned obs. 29ºN}
+# Latitudinal bin 29ºN
+battus29 <- subset(battus, latitudinal_bin == "29")
+astyanax29 <- subset(astyanax, latitudinal_bin == "29")
+archippus29 <- subset(archippus, latitudinal_bin == "29")
+
+# Now capping the number of observations per date (but not by Julian day/doy):
+battus_capped29 = battus29[!duplicated(battus29$observed_on),]
+battus_capped29[order(battus_capped29[,'julian_day']),]
+
+astyanax_capped29 = astyanax29[!duplicated(astyanax29$observed_on),]
+astyanax_capped29[order(astyanax_capped29[,'julian_day']),]
+
+archippus_capped29 = archippus29[!duplicated(archippus29$observed_on),]
+archippus_capped29[order(archippus_capped29[,'julian_day']),]
+
+battus_capped29 # n = 720
+astyanax_capped29 # n = 62
+archippus_capped29 # n = 339
+```
+
+```{r Capping binned obs. 30ºN}
+battus30 <- subset(battus, latitudinal_bin == "30")
+astyanax30 <- subset(astyanax, latitudinal_bin == "30")
+archippus30 <- subset(archippus, latitudinal_bin == "30")
+
+battus_capped30 = battus30[!duplicated(battus30$observed_on),]
+battus_capped30[order(battus_capped30[,'julian_day']),]
+
+astyanax_capped30 = astyanax30[!duplicated(astyanax30$observed_on),]
+astyanax_capped30[order(astyanax_capped30[,'julian_day']),]
+
+archippus_capped30 = archippus30[!duplicated(archippus30$observed_on),]
+archippus_capped30[order(archippus_capped30[,'julian_day']),]
+
+battus_capped30 # n = 1069
+astyanax_capped30 # n = 311
+archippus_capped30 # n = 518
+```
+
+```{r Capping binned obs. 31ºN}
+battus31 <- subset(battus, latitudinal_bin == "31")
+astyanax31 <- subset(astyanax, latitudinal_bin == "31")
+archippus31 <- subset(archippus, latitudinal_bin == "31")
+
+battus_capped31 = battus31[!duplicated(battus31$observed_on),]
+battus_capped31[order(battus_capped31[,'julian_day']),]
+
+astyanax_capped31 = astyanax31[!duplicated(astyanax31$observed_on),]
+astyanax_capped31[order(astyanax_capped31[,'julian_day']),]
+
+archippus_capped31 = archippus31[!duplicated(archippus31$observed_on),]
+archippus_capped31[order(archippus_capped31[,'julian_day']),]
+
+battus_capped31 # n = 564
+astyanax_capped31 # n = 261
+archippus_capped31 # n = 266
+```
+
+```{r Capping binned obs. 32ºN}
+battus32 <- subset(battus, latitudinal_bin == "32")
+astyanax32 <- subset(astyanax, latitudinal_bin == "32")
+archippus32 <- subset(archippus, latitudinal_bin == "32")
+
+battus_capped32 = battus32[!duplicated(battus32$observed_on),]
+battus_capped32[order(battus_capped32[,'julian_day']),]
+
+astyanax_capped32 = astyanax32[!duplicated(astyanax32$observed_on),]
+astyanax_capped32[order(astyanax_capped32[,'julian_day']),]
+
+archippus_capped32 = archippus32[!duplicated(archippus32$observed_on),]
+archippus_capped32[order(archippus_capped32[,'julian_day']),]
+
+battus_capped32 # n = 301
+astyanax_capped32 # n = 204
+archippus_capped32 # n = 196
+```
+
+```{r Capping binned obs. 33ºN}
+battus33 <- subset(battus, latitudinal_bin == "33")
+astyanax33 <- subset(astyanax, latitudinal_bin == "33")
+archippus33 <- subset(archippus, latitudinal_bin == "33")
+
+battus_capped33 = battus33[!duplicated(battus33$observed_on),]
+battus_capped33[order(battus_capped33[,'julian_day']),]
+
+astyanax_capped33 = astyanax33[!duplicated(astyanax33$observed_on),]
+astyanax_capped33[order(astyanax_capped33[,'julian_day']),]
+
+archippus_capped33 = archippus33[!duplicated(archippus33$observed_on),]
+archippus_capped33[order(archippus_capped33[,'julian_day']),]
+
+battus_capped33 # n = 689
+astyanax_capped33 # n = 417
+archippus_capped33 # n = 422
+```
+
+```{r Capping binned obs. 34ºN}
+battus34 <- subset(battus, latitudinal_bin == "34")
+astyanax34 <- subset(astyanax, latitudinal_bin == "34")
+archippus34 <- subset(archippus, latitudinal_bin == "34")
+
+battus_capped34 = battus34[!duplicated(battus34$observed_on),]
+battus_capped34[order(battus_capped34[,'julian_day']),]
+
+astyanax_capped34 = astyanax34[!duplicated(astyanax34$observed_on),]
+astyanax_capped34[order(astyanax_capped34[,'julian_day']),]
+
+archippus_capped34 = archippus34[!duplicated(archippus34$observed_on),]
+archippus_capped34[order(archippus_capped34[,'julian_day']),]
+
+battus_capped34 # n = 317
+astyanax_capped34 # n = 516
+archippus_capped34 # n = 229
+```
+
+```{r Capping binned obs. 35ºN}
+battus35 <- subset(battus, latitudinal_bin == "35")
+astyanax35 <- subset(astyanax, latitudinal_bin == "35")
+archippus35 <- subset(archippus, latitudinal_bin == "35")
+
+battus_capped35 = battus35[!duplicated(battus35$observed_on),]
+battus_capped35[order(battus_capped35[,'julian_day']),]
+
+astyanax_capped35 = astyanax35[!duplicated(astyanax35$observed_on),]
+astyanax_capped35[order(astyanax_capped35[,'julian_day']),]
+
+archippus_capped35 = archippus35[!duplicated(archippus35$observed_on),]
+archippus_capped35[order(archippus_capped35[,'julian_day']),]
+
+battus_capped35 # n = 616
+astyanax_capped35 # n = 574
+archippus_capped35 # n = 251
+```
+
+```{r Capping binned obs. 36ºN}
+battus36 <- subset(battus, latitudinal_bin == "36")
+astyanax36 <- subset(astyanax, latitudinal_bin == "36")
+archippus36 <- subset(archippus, latitudinal_bin == "36")
+
+battus_capped36 = battus36[!duplicated(battus36$observed_on),]
+battus_capped36[order(battus_capped36[,'julian_day']),]
+
+astyanax_capped36 = astyanax36[!duplicated(astyanax36$observed_on),]
+astyanax_capped36[order(astyanax_capped36[,'julian_day']),]
+
+archippus_capped36 = archippus36[!duplicated(archippus36$observed_on),]
+archippus_capped36[order(archippus_capped36[,'julian_day']),]
+
+battus_capped36 # n = 726
+astyanax_capped36 # n = 637
+archippus_capped36 # n = 375
+```
+
+
+```{r Capping binned obs. 37ºN}
+battus37 <- subset(battus, latitudinal_bin == "37")
+astyanax37 <- subset(astyanax, latitudinal_bin == "37")
+archippus37 <- subset(archippus, latitudinal_bin == "37")
+
+battus_capped37 = battus37[!duplicated(battus37$observed_on),]
+battus_capped37[order(battus_capped37[,'julian_day']),]
+
+astyanax_capped37 = astyanax37[!duplicated(astyanax37$observed_on),]
+astyanax_capped37[order(astyanax_capped37[,'julian_day']),]
+
+archippus_capped37 = archippus37[!duplicated(archippus37$observed_on),]
+archippus_capped37[order(archippus_capped37[,'julian_day']),]
+
+battus_capped37 # n = 386
+astyanax_capped37 # n = 419
+archippus_capped37 # n = 206
+```
+
+```{r Capping binned obs. 38ºN}
+battus38 <- subset(battus, latitudinal_bin == "38")
+astyanax38 <- subset(astyanax, latitudinal_bin == "38")
+archippus38 <- subset(archippus, latitudinal_bin == "38")
+
+battus_capped38 = battus38[!duplicated(battus38$observed_on),]
+battus_capped38[order(battus_capped38[,'julian_day']),]
+
+astyanax_capped38 = astyanax38[!duplicated(astyanax38$observed_on),]
+astyanax_capped38[order(astyanax_capped38[,'julian_day']),]
+
+archippus_capped38 = archippus38[!duplicated(archippus38$observed_on),]
+archippus_capped38[order(archippus_capped38[,'julian_day']),]
+
+battus_capped38 # n = 424
+astyanax_capped38 # n = 464
+archippus_capped38 # n = 203
+```
+
+```{r Capping binned obs. 39ºN}
+battus39 <- subset(battus, latitudinal_bin == "39")
+astyanax39 <- subset(astyanax, latitudinal_bin == "39")
+archippus39 <- subset(archippus, latitudinal_bin == "39")
+
+battus_capped39 = battus39[!duplicated(battus39$observed_on),]
+battus_capped39[order(battus_capped39[,'julian_day']),]
+
+astyanax_capped39 = astyanax39[!duplicated(astyanax39$observed_on),]
+astyanax_capped39[order(astyanax_capped39[,'julian_day']),]
+
+archippus_capped39 = archippus39[!duplicated(archippus39$observed_on),]
+archippus_capped39[order(archippus_capped39[,'julian_day']),]
+
+battus_capped39 # n = 507
+astyanax_capped39 # n = 591
+archippus_capped39 # n = 447
+```
+
+```{r Capping binned obs. 40ºN}
+battus40 <- subset(battus, latitudinal_bin == "40")
+astyanax40 <- subset(astyanax, latitudinal_bin == "40")
+archippus40 <- subset(archippus, latitudinal_bin == "40")
+
+battus_capped40 = battus40[!duplicated(battus40$observed_on),]
+battus_capped40[order(battus_capped40[,'julian_day']),]
+
+astyanax_capped40 = astyanax40[!duplicated(astyanax40$observed_on),]
+astyanax_capped40[order(astyanax_capped40[,'julian_day']),]
+
+archippus_capped40 = archippus40[!duplicated(archippus40$observed_on),]
+archippus_capped40[order(archippus_capped40[,'julian_day']),]
+
+battus_capped40 # n = 235
+astyanax_capped40 # n = 523
+archippus_capped40 # n = 367
+```
+
+```{r Capping binned obs. 41ºN}
+battus41 <- subset(battus, latitudinal_bin == "41")
+astyanax41 <- subset(astyanax, latitudinal_bin == "41")
+archippus41 <- subset(archippus, latitudinal_bin == "41")
+
+battus_capped41 = battus41[!duplicated(battus41$observed_on),]
+battus_capped41[order(battus_capped41[,'julian_day']),]
+
+astyanax_capped41 = astyanax41[!duplicated(astyanax41$observed_on),]
+astyanax_capped41[order(astyanax_capped41[,'julian_day']),]
+
+archippus_capped41 = archippus41[!duplicated(archippus41$observed_on),]
+archippus_capped41[order(archippus_capped41[,'julian_day']),]
+
+battus_capped41 # n = 167
+astyanax_capped41 # n = 430
+archippus_capped41 # n = 388
+```
+
+```{r Capping binned obs. 42ºN}
+battus42 <- subset(battus, latitudinal_bin == "42")
+astyanax42 <- subset(astyanax, latitudinal_bin == "42")
+archippus42 <- subset(archippus, latitudinal_bin == "42")
+
+battus_capped42 = battus42[!duplicated(battus42$observed_on),]
+battus_capped42[order(battus_capped42[,'julian_day']),]
+
+astyanax_capped42 = astyanax42[!duplicated(astyanax42$observed_on),]
+astyanax_capped42[order(astyanax_capped42[,'julian_day']),]
+
+archippus_capped42 = archippus42[!duplicated(archippus42$observed_on),]
+archippus_capped42[order(archippus_capped42[,'julian_day']),]
+
+battus_capped42 # n = 82
+astyanax_capped42 # n = 389
+archippus_capped42 # n = 457
+```
+
+```{r Capping binned obs. 43ºN}
+battus43 <- subset(battus, latitudinal_bin == "43")
+astyanax43 <- subset(astyanax, latitudinal_bin == "43")
+archippus43 <- subset(archippus, latitudinal_bin == "43")
+
+battus_capped43 = battus43[!duplicated(battus43$observed_on),]
+battus_capped43[order(battus_capped43[,'julian_day']),]
+
+astyanax_capped43 = astyanax43[!duplicated(astyanax43$observed_on),]
+astyanax_capped43[order(astyanax_capped43[,'julian_day']),]
+
+archippus_capped43 = archippus43[!duplicated(archippus43$observed_on),]
+archippus_capped43[order(archippus_capped43[,'julian_day']),]
+
+battus_capped43 # n = 34
+astyanax_capped43 # n = 262
+archippus_capped43 # n = 450
+```
+
+```{r 29ºN quantile estimates}
+quantile_ci(observations = battus_capped29$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_capped29$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_capped29$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+
+quantile_ci(observations = battus_capped29$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_capped29$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_capped29$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+```
+
+```{r 30ºN quantile estimates}
+quantile_ci(observations = battus_capped30$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_capped30$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_capped30$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+
+quantile_ci(observations = battus_capped30$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_capped30$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_capped30$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+```
+
+```{r 31ºN quantile estimates}
+quantile_ci(observations = battus_capped31$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_capped31$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_capped31$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+
+quantile_ci(observations = battus_capped31$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_capped31$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_capped31$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+```
+
+```{r 32ºN quantile estimates}
+quantile_ci(observations = battus_capped32$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_capped32$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_capped32$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+
+quantile_ci(observations = battus_capped32$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_capped32$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_capped32$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+```
+
+```{r 33ºN quantile estimates}
+quantile_ci(observations = battus_capped33$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_capped33$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_capped33$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+
+quantile_ci(observations = battus_capped33$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_capped33$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_capped33$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+```
+
+```{r 34ºN quantile estimates}
+quantile_ci(observations = battus_capped34$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_capped34$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_capped34$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+
+quantile_ci(observations = battus_capped34$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_capped34$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_capped34$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+```
+
+```{r 35ºN quantile estimates}
+quantile_ci(observations = battus_capped35$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_capped35$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_capped35$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+
+quantile_ci(observations = battus_capped35$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_capped35$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_capped35$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+```
+
+```{r 36ºN quantile estimates}
+quantile_ci(observations = battus_capped36$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_capped36$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_capped36$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+
+quantile_ci(observations = battus_capped36$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_capped36$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_capped36$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+```
+
+```{r 37ºN quantile estimates}
+quantile_ci(observations = battus_capped37$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_capped37$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_capped37$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+
+quantile_ci(observations = battus_capped37$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_capped37$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_capped37$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+```
+
+```{r 38ºN quantile estimates}
+quantile_ci(observations = battus_capped38$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_capped38$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_capped38$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+
+quantile_ci(observations = battus_capped38$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_capped38$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_capped38$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+```
+
+```{r 39ºN quantile estimates}
+quantile_ci(observations = battus_capped39$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_capped39$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_capped39$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+
+quantile_ci(observations = battus_capped39$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_capped39$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_capped39$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+```
+
+```{r 40ºN quantile estimates}
+quantile_ci(observations = battus_capped40$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_capped40$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_capped40$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+
+quantile_ci(observations = battus_capped40$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_capped40$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_capped40$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+```
+
+```{r 41ºN quantile estimates}
+quantile_ci(observations = battus_capped41$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_capped41$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_capped41$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+
+quantile_ci(observations = battus_capped41$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_capped41$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_capped41$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+```
+
+```{r 42ºN quantile estimates}
+quantile_ci(observations = battus_capped42$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_capped42$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_capped42$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+
+quantile_ci(observations = battus_capped42$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_capped42$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_capped42$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+```
+
+```{r 43ºN quantile estimates}
+quantile_ci(observations = battus_capped43$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_capped43$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_capped43$julian_day, percentile = 0.10, bootstraps = 10000, conf = 0.95, type = "perc")
+
+quantile_ci(observations = battus_capped43$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = astyanax_capped43$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+quantile_ci(observations = archippus_capped43$julian_day, percentile = 0.90, bootstraps = 10000, conf = 0.95, type = "perc")
+```
+
+
